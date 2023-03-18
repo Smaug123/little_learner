@@ -1,0 +1,218 @@
+name: Rust
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "cargo test",
+          "run": "nix develop --command cargo test --verbose"
+        }
+      ]
+    }
+
+  build-release:
+    {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "cargo test (release)",
+          "run": "nix develop --command cargo test --verbose --release"
+        }
+      ]
+    }
+
+    #  shellcheck:
+    #    {
+    #      "name": "Shellcheck",
+    #      "runs-on": "ubuntu-latest",
+    #      "steps": [
+    #        {
+    #          "uses": "actions/checkout@v3",
+    #          "name": "Checkout"
+    #        },
+    #        {
+    #          "name": "Install Nix",
+    #          "uses": "cachix/install-nix-action@v17",
+    #          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+    #        },
+    #        {
+    #          "name": "Run Shellcheck",
+    #          "run": "nix develop --command bash -c \"find . -type f -name '*.sh' | xargs shellcheck\""
+    #        }
+    #      ]
+    #    }
+
+  alejandra:
+    {
+      "name": "Nix formatting",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Run Alejandra",
+          "run": "nix develop .#ci --command alejandra -- --check ."
+        }
+      ]
+    }
+
+  rust-fmt:
+    {
+      "name": "Rust formatting",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Run ShellCheck",
+          "run": "nix develop --command cargo -- fmt --all -- --check"
+        }
+      ]
+    }
+
+  clippy:
+    {
+      "name": "Clippy",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Run Clippy",
+          "run": "nix develop --command cargo -- clippy -- -D warnings"
+        }
+      ]
+    }
+
+  nix-build:
+    {
+      "name": "Nix build",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Build app",
+          "run": "nix build"
+        }
+      ]
+    }
+
+  nix-run:
+    {
+      "name": "Run app through Nix",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Run app",
+          "run": "nix run"
+        }
+      ]
+    }
+
+  linkcheck:
+    {
+      "name": "Check links",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v3",
+          "name": "Checkout"
+        },
+        {
+          "name": "Install Nix",
+          "uses": "cachix/install-nix-action@v17",
+          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+        },
+        {
+          "name": "Run link checker",
+          "run": "nix develop .#ci --command markdown-link-check README.md"
+        }
+      ]
+    }
+
+  all-required-checks-complete:
+    {
+      "needs": 
+    [
+      'nix-build',
+      'nix-run',
+      'build',
+      'build-release',
+      'alejandra',
+      'clippy',
+      'rust-fmt',
+      'linkcheck',
+      # 'shellcheck'
+    ],
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        { "run": "echo \"All required checks complete.\"" }
+      ]
+    }
