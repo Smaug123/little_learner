@@ -44,15 +44,37 @@ macro_rules! tensor {
     ($x:ty , $i: expr, $($is:expr),+) => {[tensor!($x, $($is),+); $i]};
 }
 
-pub trait Extensible<A> {
+pub trait Extensible1<A> {
+    fn apply<F>(&self, other: &A, op: &F) -> Self
+    where
+        F: Fn(&A, &A) -> A;
+}
+
+pub trait Extensible2<A> {
     fn apply<F>(&self, other: &Self, op: &F) -> Self
     where
         F: Fn(&A, &A) -> A;
 }
 
-impl<A, T, const N: usize> Extensible<A> for [T; N]
+impl<A, T, const N: usize> Extensible1<A> for [T; N]
 where
-    T: Extensible<A> + Copy + Default,
+    T: Extensible1<A> + Copy + Default,
+{
+    fn apply<F>(&self, other: &A, op: &F) -> Self
+    where
+        F: Fn(&A, &A) -> A,
+    {
+        let mut result = [Default::default(); N];
+        for (i, coord) in self.iter().enumerate() {
+            result[i] = T::apply(coord, other, op);
+        }
+        result
+    }
+}
+
+impl<A, T, const N: usize> Extensible2<A> for [T; N]
+where
+    T: Extensible2<A> + Copy + Default,
 {
     fn apply<F>(&self, other: &Self, op: &F) -> Self
     where
@@ -67,9 +89,23 @@ where
 }
 
 #[macro_export]
-macro_rules! extensible {
+macro_rules! extensible1 {
     ($x: ty) => {
-        impl Extensible<$x> for $x {
+        impl Extensible1<$x> for $x {
+            fn apply<F>(&self, other: &$x, op: &F) -> Self
+            where
+                F: Fn(&Self, &Self) -> Self,
+            {
+                op(self, other)
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! extensible2 {
+    ($x: ty) => {
+        impl Extensible2<$x> for $x {
             fn apply<F>(&self, other: &Self, op: &F) -> Self
             where
                 F: Fn(&Self, &Self) -> Self,
@@ -80,12 +116,23 @@ macro_rules! extensible {
     };
 }
 
-extensible!(u8);
-extensible!(f64);
+extensible1!(u8);
+extensible1!(f64);
 
-pub fn extension<T, A, F>(t1: &T, t2: &T, op: F) -> T
+extensible2!(u8);
+extensible2!(f64);
+
+pub fn extension1<T, A, F>(t1: &T, t2: &A, op: F) -> T
 where
-    T: Extensible<A>,
+    T: Extensible1<A>,
+    F: Fn(&A, &A) -> A,
+{
+    t1.apply::<F>(t2, &op)
+}
+
+pub fn extension2<T, A, F>(t1: &T, t2: &T, op: F) -> T
+where
+    T: Extensible2<A>,
     F: Fn(&A, &A) -> A,
 {
     t1.apply::<F>(t2, &op)
@@ -108,15 +155,18 @@ mod tests {
     #[test]
     fn test_extension() {
         let x: tensor!(u8, 1) = [2];
+        assert_eq!(extension1(&x, &7, |x, y| x + y), [9]);
         let y: tensor!(u8, 1) = [7];
-        assert_eq!(extension(&x, &y, |x, y| x + y), [9]);
+        assert_eq!(extension2(&x, &y, |x, y| x + y), [9]);
 
         let x: tensor!(u8, 3) = [5, 6, 7];
+        assert_eq!(extension1(&x, &2, |x, y| x + y), [7, 8, 9]);
         let y: tensor!(u8, 3) = [2, 0, 1];
-        assert_eq!(extension(&x, &y, |x, y| x + y), [7, 6, 8]);
+        assert_eq!(extension2(&x, &y, |x, y| x + y), [7, 6, 8]);
 
         let x: tensor!(u8, 2, 3) = [[4, 6, 7], [2, 0, 1]];
+        assert_eq!(extension1(&x, &2, |x, y| x + y), [[6, 8, 9], [4, 2, 3]]);
         let y: tensor!(u8, 2, 3) = [[1, 2, 2], [6, 3, 1]];
-        assert_eq!(extension(&x, &y, |x, y| x + y), [[5, 8, 9], [8, 3, 2]]);
+        assert_eq!(extension2(&x, &y, |x, y| x + y), [[5, 8, 9], [8, 3, 2]]);
     }
 }
