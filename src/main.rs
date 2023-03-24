@@ -1,3 +1,5 @@
+mod expr_syntax_tree;
+
 use std::iter::Sum;
 use std::ops::{Mul, Sub};
 
