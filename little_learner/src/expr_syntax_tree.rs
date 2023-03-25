@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use immutable_chunkmap::map;
 use std::ops::{Add, Mul};
 
@@ -50,24 +48,15 @@ impl<A> Expr<A> {
         Expr::Apply(var, Box::new(f), Box::new(arg))
     }
 
-    pub fn sum(x: Expr<A>, y: Expr<A>) -> Expr<A> {
-        Expr::Sum(Box::new(x), Box::new(y))
-    }
-
-    pub fn mul(x: Expr<A>, y: Expr<A>) -> Expr<A> {
-        Expr::Mul(Box::new(x), Box::new(y))
-    }
-
     pub fn differentiate(one: &A, zero: &A, var: u32, f: &Expr<A>) -> Expr<A>
     where
         A: Clone,
     {
         match f {
             Expr::Const(_) => Expr::Const(zero.clone()),
-            Expr::Sum(x, y) => Expr::sum(
-                Expr::differentiate(one, zero, var, x),
-                Expr::differentiate(one, zero, var, y),
-            ),
+            Expr::Sum(x, y) => {
+                Expr::differentiate(one, zero, var, x) + Expr::differentiate(one, zero, var, y)
+            }
             Expr::Variable(i) => {
                 if *i == var {
                     Expr::Const(one.clone())
@@ -75,16 +64,15 @@ impl<A> Expr<A> {
                     Expr::Const(zero.clone())
                 }
             }
-            Expr::Mul(x, y) => Expr::sum(
+            Expr::Mul(x, y) => {
                 Expr::Mul(
                     Box::new(Expr::differentiate(one, zero, var, x.as_ref())),
                     (*y).clone(),
-                ),
-                Expr::Mul(
+                ) + Expr::Mul(
                     Box::new(Expr::differentiate(one, zero, var, y.as_ref())),
                     (*x).clone(),
-                ),
-            ),
+                )
+            }
             Expr::Apply(new_var, func, expr) => {
                 if *new_var == var {
                     panic!(
@@ -106,6 +94,20 @@ impl<A> Expr<A> {
     }
 }
 
+impl<A> Add for Expr<A> {
+    type Output = Expr<A>;
+    fn add(self: Expr<A>, y: Expr<A>) -> Expr<A> {
+        Expr::Sum(Box::new(self), Box::new(y))
+    }
+}
+
+impl<A> Mul for Expr<A> {
+    type Output = Expr<A>;
+    fn mul(self: Expr<A>, y: Expr<A>) -> Expr<A> {
+        Expr::Mul(Box::new(self), Box::new(y))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,11 +116,7 @@ mod tests {
     fn test_expr() {
         let expr = Expr::apply(
             0,
-            Expr::apply(
-                1,
-                Expr::sum(Expr::Variable(0), Expr::Variable(1)),
-                Expr::Const(4),
-            ),
+            Expr::apply(1, Expr::Variable(0) + Expr::Variable(1), Expr::Const(4)),
             Expr::Const(3),
         );
 
@@ -127,8 +125,8 @@ mod tests {
 
     #[test]
     fn test_derivative() {
-        let add_four = Expr::sum(Expr::Variable(0), Expr::Const(4));
-        let mul_five = Expr::mul(Expr::Variable(1), Expr::Const(5));
+        let add_four = Expr::Variable(0) + Expr::Const(4);
+        let mul_five = Expr::Variable(1) * Expr::Const(5);
 
         {
             let mul_five_then_add_four = Expr::apply(0, add_four.clone(), mul_five.clone());
