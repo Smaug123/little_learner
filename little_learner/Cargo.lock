@@ -52,15 +52,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "little_learner_app"
-version = "0.1.0"
-dependencies = [
- "immutable-chunkmap",
- "little_learner",
- "ordered-float",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -23,7 +23,7 @@
     crate2nix,
     ...
   }: let
-    name = "little_learner";
+    name = "little_learner_app";
   in
     utils.lib.eachDefaultSystem
     (
@@ -77,7 +77,7 @@
           PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
         };
       in rec {
-        packages.${name} = project.rootCrate.build;
+        packages.${name} = project.workspaceMembers.${name}.build;
 
         # `nix build`
         defaultPackage = packages.${name};
