@@ -1,3 +1,4 @@
+mod auto_diff;
 mod expr_syntax_tree;
 
 use std::iter::Sum;
