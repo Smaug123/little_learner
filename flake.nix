@@ -37,8 +37,8 @@
               # Because rust-overlay bundles multiple rust packages into one
               # derivation, specify that mega-bundle here, so that crate2nix
               # will use them automatically.
-              rustc = self.rust-bin.stable.latest.default;
-              cargo = self.rust-bin.stable.latest.default;
+              rustc = self.rust-bin.nightly.latest.default;
+              cargo = self.rust-bin.nightly.latest.default;
             })
           ];
         };
