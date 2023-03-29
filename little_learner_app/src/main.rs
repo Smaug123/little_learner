@@ -1,93 +1,90 @@
-use little_learner::auto_diff::{Differentiable, Scalar};
-use little_learner::tensor;
-use little_learner::tensor::{extension2, Extensible2};
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+
+mod with_tensor;
+
+use little_learner::auto_diff::{of_scalar, of_slice, to_scalar, Differentiable};
+use little_learner::scalar::Scalar;
+use little_learner::traits::{One, Zero};
 use ordered_float::NotNan;
 
 use std::iter::Sum;
-use std::ops::{Mul, Sub};
+use std::ops::{Add, Mul, Neg};
 
-type Point<A, const N: usize> = [A; N];
+use crate::with_tensor::{l2_loss, predict_line};
 
-type Parameters<A, const N: usize, const M: usize> = [Point<A, N>; M];
-
-fn dot_points<A: Mul, const N: usize>(x: &Point<A, N>, y: &Point<A, N>) -> A
+fn dot_2<A, const RANK: usize>(
+    x: &Differentiable<A, RANK>,
+    y: &Differentiable<A, RANK>,
+) -> Differentiable<A, RANK>
 where
-    A: Sum<<A as Mul>::Output> + Copy + Default + Mul<Output = A> + Extensible2<A>,
+    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Copy + Default,
 {
-    extension2(x, y, |&x, &y| x * y).into_iter().sum()
+    Differentiable::map2(x, y, &|x, y| x.clone() * y.clone())
 }
 
-fn dot<A, const N: usize, const M: usize>(x: &Point<A, N>, y: &Parameters<A, N, M>) -> Point<A, M>
+fn squared_2<A, const RANK: usize>(x: &Differentiable<A, RANK>) -> Differentiable<A, RANK>
 where
-    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + Extensible2<A>,
+    A: Mul<Output = A> + Copy + Default,
 {
-    let mut result = [Default::default(); M];
-    for (i, coord) in y.iter().map(|y| dot_points(x, y)).enumerate() {
-        result[i] = coord;
-    }
-    result
+    Differentiable::map2(x, x, &|x, y| x.clone() * y.clone())
 }
 
-fn sum<A, const N: usize>(x: &tensor!(A, N)) -> A
+fn sum_2<A>(x: Differentiable<A, 1>) -> Scalar<A>
 where
-    A: Sum<A> + Copy,
+    A: Sum<A> + Copy + Add<Output = A> + Zero,
 {
-    A::sum(x.iter().cloned())
+    Differentiable::to_vector(x)
+        .into_iter()
+        .map(to_scalar)
+        .sum()
 }
 
-fn squared<A, const N: usize>(x: &tensor!(A, N)) -> tensor!(A, N)
+fn l2_norm_2<A>(prediction: &Differentiable<A, 1>, data: &Differentiable<A, 1>) -> Scalar<A>
 where
-    A: Mul<Output = A> + Extensible2<A> + Copy + Default,
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero + Neg,
 {
-    extension2(x, x, |&a, &b| (a * b))
+    let diff = Differentiable::map2(prediction, data, &|x, y| x.clone() - y.clone());
+    sum_2(squared_2(&diff))
 }
 
-fn l2_norm<A, const N: usize>(prediction: &tensor!(A, N), data: &tensor!(A, N)) -> A
-where
-    A: Sum<A> + Mul<Output = A> + Extensible2<A> + Copy + Default + Sub<Output = A>,
-{
-    let diff = extension2(prediction, data, |&x, &y| x - y);
-    sum(&squared(&diff))
-}
-
-pub fn l2_loss<A, F, Params, const N: usize>(
+pub fn l2_loss_2<A, F, Params>(
     target: F,
-    data_xs: &tensor!(A, N),
-    data_ys: &tensor!(A, N),
-    params: &Params,
-) -> A
+    data_xs: Differentiable<A, 1>,
+    data_ys: Differentiable<A, 1>,
+    params: Params,
+) -> Scalar<A>
 where
-    F: Fn(&tensor!(A, N), &Params) -> tensor!(A, N),
-    A: Sum<A> + Mul<Output = A> + Extensible2<A> + Copy + Default + Sub<Output = A>,
+    F: Fn(Differentiable<A, 1>, Params) -> Differentiable<A, 1>,
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero,
 {
     let pred_ys = target(data_xs, params);
-    l2_norm(&pred_ys, data_ys)
+    l2_norm_2(&pred_ys, &data_ys)
 }
 
-trait One {
-    const ONE: Self;
-}
-
-impl One for f64 {
-    const ONE: f64 = 1.0;
-}
-
-fn predict_line<A, const N: usize>(xs: &tensor!(A, N), theta: &tensor!(A, 2)) -> tensor!(A, N)
+fn predict_line_2<A>(xs: Differentiable<A, 1>, theta: Differentiable<A, 1>) -> Differentiable<A, 1>
 where
-    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + Extensible2<A> + One,
+    A: Mul<Output = A> + Add<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + One + Zero,
 {
-    let mut result: tensor!(A, N) = [Default::default(); N];
-    for (i, &x) in xs.iter().enumerate() {
-        result[i] = dot(&[x, One::ONE], &[*theta])[0];
+    let xs = Differentiable::to_vector(xs)
+        .into_iter()
+        .map(|v| to_scalar(v));
+    let mut result = vec![];
+    for x in xs {
+        let left_arg = Differentiable::of_vector(vec![
+            of_scalar(x.clone()),
+            of_scalar(<Scalar<A> as One>::one()),
+        ]);
+        let dotted = Differentiable::to_vector(dot_2(&left_arg, &theta));
+        result.push(dotted[0].clone());
     }
-    result
+    Differentiable::of_vector(result)
 }
 
 fn square<A>(x: &A) -> A
 where
-    A: Mul<Output = A> + Clone + std::fmt::Display,
+    A: Mul<Output = A> + Clone,
 {
-    println!("{}", x);
     x.clone() * x.clone()
 }
 
@@ -100,61 +97,16 @@ fn main() {
     );
     println!("{:?}", loss);
 
-    let input_vec = Differentiable::Vector(Box::new([Differentiable::Scalar(Scalar::Number(
-        NotNan::new(27.0).expect("not nan"),
-    ))]));
+    let loss = l2_loss_2(
+        predict_line_2,
+        of_slice(&[2.0, 1.0, 4.0, 3.0]),
+        of_slice(&[1.8, 1.2, 4.2, 3.3]),
+        of_slice(&[0.0099, 0.0]),
+    );
+    println!("{}", loss);
 
-    let grad = Differentiable::grad(|x| x.map(&|x| square(&x)), input_vec);
+    let input_vec = of_slice(&[NotNan::new(27.0).expect("not nan")]);
+
+    let grad = Differentiable::grad(|x| Differentiable::map(x, &|x| square(&x)), input_vec);
     println!("{}", grad);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use little_learner::tensor::extension1;
-
-    #[test]
-    fn test_extension() {
-        let x: tensor!(u8, 1) = [2];
-        assert_eq!(extension1(&x, &7, |x, y| x + y), [9]);
-        let y: tensor!(u8, 1) = [7];
-        assert_eq!(extension2(&x, &y, |x, y| x + y), [9]);
-
-        let x: tensor!(u8, 3) = [5, 6, 7];
-        assert_eq!(extension1(&x, &2, |x, y| x + y), [7, 8, 9]);
-        let y: tensor!(u8, 3) = [2, 0, 1];
-        assert_eq!(extension2(&x, &y, |x, y| x + y), [7, 6, 8]);
-
-        let x: tensor!(u8, 2, 3) = [[4, 6, 7], [2, 0, 1]];
-        assert_eq!(extension1(&x, &2, |x, y| x + y), [[6, 8, 9], [4, 2, 3]]);
-        let y: tensor!(u8, 2, 3) = [[1, 2, 2], [6, 3, 1]];
-        assert_eq!(extension2(&x, &y, |x, y| x + y), [[5, 8, 9], [8, 3, 2]]);
-    }
-
-    #[test]
-    fn test_l2_norm() {
-        assert_eq!(
-            l2_norm(&[4.0, -3.0, 0.0, -4.0, 3.0], &[0.0, 0.0, 0.0, 0.0, 0.0]),
-            50.0
-        )
-    }
-
-    #[test]
-    fn test_l2_loss() {
-        let loss = l2_loss(
-            predict_line,
-            &[2.0, 1.0, 4.0, 3.0],
-            &[1.8, 1.2, 4.2, 3.3],
-            &[0.0, 0.0],
-        );
-        assert_eq!(loss, 33.21);
-
-        let loss = l2_loss(
-            predict_line,
-            &[2.0, 1.0, 4.0, 3.0],
-            &[1.8, 1.2, 4.2, 3.3],
-            &[0.0099, 0.0],
-        );
-        assert_eq!((100.0 * loss).round() / 100.0, 32.59);
-    }
 }
