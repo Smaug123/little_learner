@@ -7,7 +7,7 @@ use std::{
     ops::{Add, AddAssign, Div, Mul, Neg, Sub},
 };
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum LinkData<A> {
     Addition(Box<Scalar<A>>, Box<Scalar<A>>),
     Neg(Box<Scalar<A>>),
@@ -16,9 +16,9 @@ pub enum LinkData<A> {
     Log(Box<Scalar<A>>),
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Link<A> {
-    EndOfLink,
+    EndOfLink(Option<usize>),
     Link(LinkData<A>),
 }
 
@@ -28,7 +28,8 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Link::EndOfLink => f.write_str("<end>"),
+            Link::EndOfLink(Some(i)) => f.write_fmt(format_args!("<end {}>", *i)),
+            Link::EndOfLink(None) => f.write_str("<end>"),
             Link::Link(LinkData::Addition(left, right)) => {
                 f.write_fmt(format_args!("({} + {})", left.as_ref(), right.as_ref()))
             }
@@ -59,7 +60,7 @@ impl<A> Link<A> {
             + One,
     {
         match self {
-            Link::EndOfLink => match acc.entry(d.clone()) {
+            Link::EndOfLink(_) => match acc.entry(d.clone()) {
                 Entry::Occupied(mut o) => {
                     let entry = o.get_mut();
                     *entry += z;
@@ -113,9 +114,9 @@ impl<A> Link<A> {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Scalar<A> {
-    Number(A),
+    Number(A, Option<usize>),
     // The value, and the link.
     Dual(A, Link<A>),
 }
@@ -125,7 +126,7 @@ where
     A: Zero,
 {
     fn zero() -> Self {
-        Scalar::Number(A::zero())
+        Scalar::Number(A::zero(), None)
     }
 }
 
@@ -198,7 +199,7 @@ where
 impl<A> Scalar<A> {
     pub fn real_part(&self) -> &A {
         match self {
-            Scalar::Number(a) => a,
+            Scalar::Number(a, _) => a,
             Scalar::Dual(a, _) => a,
         }
     }
@@ -208,7 +209,7 @@ impl<A> Scalar<A> {
         A: Clone,
     {
         match self {
-            Scalar::Number(a) => (*a).clone(),
+            Scalar::Number(a, _) => (*a).clone(),
             Scalar::Dual(a, _) => (*a).clone(),
         }
     }
@@ -216,7 +217,7 @@ impl<A> Scalar<A> {
     pub fn link(self) -> Link<A> {
         match self {
             Scalar::Dual(_, link) => link,
-            Scalar::Number(_) => Link::EndOfLink,
+            Scalar::Number(_, i) => Link::EndOfLink(i),
         }
     }
 
@@ -226,15 +227,15 @@ impl<A> Scalar<A> {
     {
         match self {
             Scalar::Dual(_, data) => data.clone(),
-            Scalar::Number(_) => Link::EndOfLink,
+            Scalar::Number(_, i) => Link::EndOfLink(*i),
         }
     }
 
-    pub fn truncate_dual(self) -> Scalar<A>
+    pub fn truncate_dual(self, index: usize) -> Scalar<A>
     where
         A: Clone,
     {
-        Scalar::Dual(self.clone_real_part(), Link::EndOfLink)
+        Scalar::Dual(self.clone_real_part(), Link::EndOfLink(Some(index)))
     }
 }
 
@@ -244,8 +245,9 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Scalar::Number(n) => f.write_fmt(format_args!("{}", n)),
-            Scalar::Dual(n, link) => f.write_fmt(format_args!("{}, link: {}", n, link)),
+            Scalar::Number(n, Some(index)) => f.write_fmt(format_args!("{}_{}", n, index)),
+            Scalar::Number(n, None) => f.write_fmt(format_args!("{}", n)),
+            Scalar::Dual(n, link) => f.write_fmt(format_args!("<{}, link: {}>", n, link)),
         }
     }
 }
