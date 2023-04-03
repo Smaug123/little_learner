@@ -132,8 +132,7 @@ where
         + Div<Output = A>
         + Zero
         + One
-        + Neg<Output = A>
-        + Display,
+        + Neg<Output = A>,
 {
     fn accumulate_gradients_vec(v: &[DifferentiableHidden<A>], acc: &mut HashMap<Scalar<A>, A>) {
         for v in v.iter().rev() {
@@ -242,7 +241,7 @@ impl<A, const RANK: usize> Differentiable<A, RANK> {
         }
     }
 
-    pub fn grad<F>(f: F, theta: Differentiable<A, RANK>) -> Differentiable<A, RANK>
+    pub fn grad<F>(f: F, theta: &Differentiable<A, RANK>) -> Differentiable<A, RANK>
     where
         F: Fn(Differentiable<A, RANK>) -> Differentiable<A, RANK>,
         A: Clone
@@ -254,8 +253,7 @@ impl<A, const RANK: usize> Differentiable<A, RANK> {
             + Zero
             + One
             + Neg<Output = A>
-            + Eq
-            + std::fmt::Display,
+            + Eq,
     {
         let mut i = 0usize;
         let wrt = theta.contents.map(&mut |x| {
@@ -332,7 +330,7 @@ mod tests {
                     x,
                 ))])
             },
-            input_vec,
+            &input_vec,
         );
 
         let grad_vec: Vec<f64> = Differentiable::to_vector(grad)
