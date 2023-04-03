@@ -13,16 +13,6 @@ use little_learner::scalar::Scalar;
 use little_learner::traits::{Exp, One, Zero};
 use ordered_float::NotNan;
 
-use crate::with_tensor::{l2_loss, predict_line};
-
-#[allow(dead_code)]
-fn l2_loss_non_autodiff_example() {
-    let xs = [2.0, 1.0, 4.0, 3.0];
-    let ys = [1.8, 1.2, 4.2, 3.3];
-    let loss = l2_loss(predict_line, &xs, &ys, &[0.0099, 0.0]);
-    println!("{:?}", loss);
-}
-
 fn iterate<A, F>(f: &F, start: A, n: u32) -> A
 where
     F: Fn(A) -> A,
@@ -33,10 +23,15 @@ where
     iterate(f, f(start), n - 1)
 }
 
+struct GradientDescentHyper<A, const RANK: usize> {
+    learning_rate: A,
+    iterations: u32,
+}
+
 fn gradient_descent_step<A, F, const RANK: usize>(
     f: &F,
-    learning_rate: A,
     theta: Differentiable<A, RANK>,
+    params: &GradientDescentHyper<A, RANK>,
 ) -> Differentiable<A, RANK>
 where
     A: Clone
@@ -54,7 +49,7 @@ where
 {
     let delta = Differentiable::grad(f, &theta);
     Differentiable::map2(&theta, &delta, &|theta, delta| {
-        (*theta).clone() - (Scalar::make(learning_rate.clone()) * (*delta).clone())
+        (*theta).clone() - (Scalar::make((params.learning_rate).clone()) * (*delta).clone())
     })
 }
 
@@ -67,7 +62,11 @@ fn main() {
     let xs = [2.0, 1.0, 4.0, 3.0];
     let ys = [1.8, 1.2, 4.2, 3.3];
 
-    let alpha = NotNan::new(0.01).expect("not nan");
+    let hyper = GradientDescentHyper {
+        learning_rate: NotNan::new(0.01).expect("not nan"),
+        iterations: 1000,
+    };
+
     let iterated = {
         let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
         let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
@@ -82,12 +81,12 @@ fn main() {
                             x,
                         ))])
                     },
-                    alpha,
                     theta,
+                    &hyper,
                 )
             },
             of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
-            1000,
+            hyper.iterations,
         )
     };
 
@@ -106,6 +105,8 @@ mod tests {
     use arrayvec::ArrayVec;
     use little_learner::auto_diff::to_scalar;
 
+    use crate::with_tensor::{l2_loss, predict_line};
+
     #[test]
     fn loss_example() {
         let xs = [2.0, 1.0, 4.0, 3.0];
@@ -118,6 +119,14 @@ mod tests {
         );
 
         assert_eq!(*loss.real_part(), 33.21);
+    }
+
+    #[test]
+    fn l2_loss_non_autodiff_example() {
+        let xs = [2.0, 1.0, 4.0, 3.0];
+        let ys = [1.8, 1.2, 4.2, 3.3];
+        let loss = l2_loss(predict_line, &xs, &ys, &[0.0099, 0.0]);
+        assert_eq!(loss, 32.5892403);
     }
 
     #[test]
@@ -163,7 +172,10 @@ mod tests {
         let xs = [2.0, 1.0, 4.0, 3.0];
         let ys = [1.8, 1.2, 4.2, 3.3];
 
-        let alpha = NotNan::new(0.01).expect("not nan");
+        let hyper = GradientDescentHyper {
+            learning_rate: NotNan::new(0.01).expect("not nan"),
+            iterations: 1000,
+        };
         let iterated = {
             let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
             let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
@@ -178,12 +190,12 @@ mod tests {
                                 x,
                             ))])
                         },
-                        alpha,
                         theta,
+                        hyper,
                     )
                 },
                 of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
-                1000,
+                hyper.iterations,
             )
         };
         let iterated = Differentiable::to_vector(iterated)
