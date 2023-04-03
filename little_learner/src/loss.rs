@@ -21,7 +21,7 @@ pub fn dot_2<A, const RANK: usize>(
     y: &Differentiable<A, RANK>,
 ) -> Differentiable<A, RANK>
 where
-    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Copy + Default,
+    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
     Differentiable::map2(x, y, &|x, y| x.clone() * y.clone())
 }
@@ -35,7 +35,7 @@ where
 
 fn sum_2<A>(x: Differentiable<A, 1>) -> Scalar<A>
 where
-    A: Sum<A> + Copy + Add<Output = A> + Zero,
+    A: Sum<A> + Clone + Add<Output = A> + Zero,
 {
     Differentiable::to_vector(x)
         .into_iter()
@@ -90,4 +90,18 @@ where
         result.push(dotted);
     }
     Differentiable::of_vector(result)
+}
+
+pub fn predict_quadratic<A>(
+    xs: Differentiable<A, 1>,
+    theta: Differentiable<A, 1>,
+) -> Differentiable<A, 1>
+where
+    A: Mul<Output = A> + Add<Output = A> + Sum + Default + One + Zero + Clone,
+{
+    Differentiable::map(xs, &mut |x| {
+        let x_powers = vec![Scalar::make(A::one()), x.clone(), square(&x)];
+        let x_powers = Differentiable::of_vector(x_powers.into_iter().map(of_scalar).collect());
+        sum_2(dot_2(&x_powers, &theta))
+    })
 }
