@@ -8,7 +8,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Neg};
 
 use little_learner::auto_diff::{of_scalar, of_slice, to_scalar, Differentiable};
 
-use little_learner::loss::{l2_loss_2, predict_line_2, square};
+use little_learner::loss::{l2_loss_2, predict_quadratic};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{Exp, One, Zero};
 use ordered_float::NotNan;
@@ -54,11 +54,11 @@ where
 }
 
 fn main() {
-    let xs = [2.0, 1.0, 4.0, 3.0];
-    let ys = [1.8, 1.2, 4.2, 3.3];
+    let xs = [-1.0, 0.0, 1.0, 2.0, 3.0];
+    let ys = [2.55, 2.1, 4.35, 10.2, 18.25];
 
     let hyper = GradientDescentHyper {
-        learning_rate: NotNan::new(0.01).expect("not nan"),
+        learning_rate: NotNan::new(0.001).expect("not nan"),
         iterations: 1000,
     };
 
@@ -70,7 +70,7 @@ fn main() {
                 gradient_descent_step(
                     &|x| {
                         Differentiable::of_vector(vec![of_scalar(l2_loss_2(
-                            predict_line_2,
+                            predict_quadratic,
                             of_slice(&xs),
                             of_slice(&ys),
                             x,
@@ -80,7 +80,11 @@ fn main() {
                     &hyper,
                 )
             },
-            of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
+            of_slice(&[
+                NotNan::<f64>::zero(),
+                NotNan::<f64>::zero(),
+                NotNan::<f64>::zero(),
+            ]),
             hyper.iterations,
         )
     };
@@ -98,7 +102,10 @@ fn main() {
 mod tests {
     use super::*;
     use arrayvec::ArrayVec;
-    use little_learner::auto_diff::to_scalar;
+    use little_learner::{
+        auto_diff::to_scalar,
+        loss::{predict_line_2, square},
+    };
 
     use crate::with_tensor::{l2_loss, predict_line};
 
@@ -213,5 +220,54 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(iterated, vec![1.0499993623489503, 0.0000018747718457656533]);
+    }
+
+    #[test]
+    fn optimise_quadratic() {
+        let xs = [-1.0, 0.0, 1.0, 2.0, 3.0];
+        let ys = [2.55, 2.1, 4.35, 10.2, 18.25];
+
+        let hyper = GradientDescentHyper {
+            learning_rate: NotNan::new(0.001).expect("not nan"),
+            iterations: 1000,
+        };
+
+        let iterated = {
+            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
+            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
+            iterate(
+                &|theta| {
+                    gradient_descent_step(
+                        &|x| {
+                            Differentiable::of_vector(vec![of_scalar(l2_loss_2(
+                                predict_quadratic,
+                                of_slice(&xs),
+                                of_slice(&ys),
+                                x,
+                            ))])
+                        },
+                        theta,
+                        &hyper,
+                    )
+                },
+                of_slice(&[
+                    NotNan::<f64>::zero(),
+                    NotNan::<f64>::zero(),
+                    NotNan::<f64>::zero(),
+                ]),
+                hyper.iterations,
+            )
+        };
+        let iterated = Differentiable::to_vector(iterated)
+            .into_iter()
+            .map(|x| to_scalar(x).real_part().into_inner())
+            .collect::<Vec<_>>();
+
+        println!("{:?}", iterated);
+
+        assert_eq!(
+            iterated,
+            [2.0546423148479684, 0.9928606519360353, 1.4787394427094362]
+        );
     }
 }
