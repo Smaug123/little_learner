@@ -54,11 +54,6 @@ where
 }
 
 fn main() {
-    let input_vec = of_slice(&[NotNan::new(27.0).expect("not nan")]);
-
-    let grad = Differentiable::grad(|x| Differentiable::map(x, &mut |x| square(&x)), &input_vec);
-    println!("Gradient of the x^2 function at x=27: {}", grad);
-
     let xs = [2.0, 1.0, 4.0, 3.0];
     let ys = [1.8, 1.2, 4.2, 3.3];
 
@@ -130,6 +125,20 @@ mod tests {
     }
 
     #[test]
+    fn grad_example() {
+        let input_vec = of_slice(&[NotNan::new(27.0).expect("not nan")]);
+
+        let grad: Vec<_> = Differentiable::to_vector(Differentiable::grad(
+            |x| Differentiable::map(x, &mut |x| square(&x)),
+            &input_vec,
+        ))
+        .into_iter()
+        .map(|x| to_scalar(x).real_part().into_inner())
+        .collect();
+        assert_eq!(grad, [54.0]);
+    }
+
+    #[test]
     fn loss_gradient() {
         let input_vec = of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]);
         let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
@@ -191,7 +200,7 @@ mod tests {
                             ))])
                         },
                         theta,
-                        hyper,
+                        &hyper,
                     )
                 },
                 of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
