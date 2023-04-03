@@ -3,10 +3,14 @@
 
 mod with_tensor;
 
-use little_learner::auto_diff::{of_scalar, of_slice, Differentiable};
+use core::hash::Hash;
+use std::ops::{Add, AddAssign, Div, Mul, Neg};
+
+use little_learner::auto_diff::{of_scalar, of_slice, to_scalar, Differentiable};
 
 use little_learner::loss::{l2_loss_2, predict_line_2, square};
-use little_learner::traits::Zero;
+use little_learner::scalar::Scalar;
+use little_learner::traits::{Exp, One, Zero};
 use ordered_float::NotNan;
 
 use crate::with_tensor::{l2_loss, predict_line};
@@ -19,37 +23,174 @@ fn l2_loss_non_autodiff_example() {
     println!("{:?}", loss);
 }
 
+fn iterate<A, F>(f: &F, start: A, n: u32) -> A
+where
+    F: Fn(A) -> A,
+{
+    if n == 0 {
+        return start;
+    }
+    iterate(f, f(start), n - 1)
+}
+
+fn gradient_descent_step<A, F, const RANK: usize>(
+    f: &F,
+    learning_rate: A,
+    theta: Differentiable<A, RANK>,
+) -> Differentiable<A, RANK>
+where
+    A: Clone
+        + Mul<Output = A>
+        + Neg<Output = A>
+        + Add<Output = A>
+        + Hash
+        + AddAssign
+        + Div<Output = A>
+        + Zero
+        + One
+        + Eq
+        + Exp,
+    F: Fn(Differentiable<A, RANK>) -> Differentiable<A, RANK>,
+{
+    let delta = Differentiable::grad(f, &theta);
+    Differentiable::map2(&theta, &delta, &|theta, delta| {
+        (*theta).clone() - (Scalar::make(learning_rate.clone()) * (*delta).clone())
+    })
+}
+
 fn main() {
     let input_vec = of_slice(&[NotNan::new(27.0).expect("not nan")]);
 
-    let grad = Differentiable::grad(|x| Differentiable::map(x, &mut |x| square(&x)), input_vec);
+    let grad = Differentiable::grad(|x| Differentiable::map(x, &mut |x| square(&x)), &input_vec);
     println!("Gradient of the x^2 function at x=27: {}", grad);
 
     let xs = [2.0, 1.0, 4.0, 3.0];
     let ys = [1.8, 1.2, 4.2, 3.3];
 
-    let loss = l2_loss_2(
-        predict_line_2,
-        of_slice(&xs),
-        of_slice(&ys),
-        of_slice(&[0.0, 0.0]),
-    );
-    println!("Computation of L2 loss: {}", loss);
+    let alpha = NotNan::new(0.01).expect("not nan");
+    let iterated = {
+        let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
+        let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
+        iterate(
+            &|theta| {
+                gradient_descent_step(
+                    &|x| {
+                        Differentiable::of_vector(vec![of_scalar(l2_loss_2(
+                            predict_line_2,
+                            of_slice(&xs),
+                            of_slice(&ys),
+                            x,
+                        ))])
+                    },
+                    alpha,
+                    theta,
+                )
+            },
+            of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
+            1000,
+        )
+    };
 
-    let input_vec = of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]);
-    let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
-    let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
-    let grad = Differentiable::grad(
-        |x| {
-            Differentiable::of_vector(vec![of_scalar(l2_loss_2(
-                predict_line_2,
-                of_slice(&xs),
-                of_slice(&ys),
-                x,
-            ))])
-        },
-        input_vec,
+    println!(
+        "After iteration: {:?}",
+        Differentiable::to_vector(iterated)
+            .into_iter()
+            .map(|x| to_scalar(x).real_part().into_inner())
+            .collect::<Vec<_>>()
     );
+}
 
-    println!("{}", grad);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrayvec::ArrayVec;
+    use little_learner::auto_diff::to_scalar;
+
+    #[test]
+    fn loss_example() {
+        let xs = [2.0, 1.0, 4.0, 3.0];
+        let ys = [1.8, 1.2, 4.2, 3.3];
+        let loss = l2_loss_2(
+            predict_line_2,
+            of_slice(&xs),
+            of_slice(&ys),
+            of_slice(&[0.0, 0.0]),
+        );
+
+        assert_eq!(*loss.real_part(), 33.21);
+    }
+
+    #[test]
+    fn loss_gradient() {
+        let input_vec = of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]);
+        let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
+        let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
+        let grad = Differentiable::grad(
+            |x| {
+                Differentiable::of_vector(vec![of_scalar(l2_loss_2(
+                    predict_line_2,
+                    of_slice(&xs),
+                    of_slice(&ys),
+                    x,
+                ))])
+            },
+            &input_vec,
+        );
+
+        assert_eq!(
+            Differentiable::to_vector(grad)
+                .into_iter()
+                .map(|x| *(to_scalar(x).real_part()))
+                .collect::<Vec<_>>(),
+            [-63.0, -21.0]
+        );
+    }
+
+    #[test]
+    fn test_iterate() {
+        let f = |t: [i32; 3]| {
+            let mut vec = ArrayVec::<i32, 3>::new();
+            for i in t {
+                vec.push(i - 3);
+            }
+            vec.into_inner().unwrap()
+        };
+        assert_eq!(iterate(&f, [1, 2, 3], 5u32), [-14, -13, -12]);
+    }
+
+    #[test]
+    fn first_optimisation_test() {
+        let xs = [2.0, 1.0, 4.0, 3.0];
+        let ys = [1.8, 1.2, 4.2, 3.3];
+
+        let alpha = NotNan::new(0.01).expect("not nan");
+        let iterated = {
+            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
+            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
+            iterate(
+                &|theta| {
+                    gradient_descent_step(
+                        &|x| {
+                            Differentiable::of_vector(vec![of_scalar(l2_loss_2(
+                                predict_line_2,
+                                of_slice(&xs),
+                                of_slice(&ys),
+                                x,
+                            ))])
+                        },
+                        alpha,
+                        theta,
+                    )
+                },
+                of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]),
+                1000,
+            )
+        };
+        let iterated = Differentiable::to_vector(iterated)
+            .into_iter()
+            .map(|x| to_scalar(x).real_part().into_inner())
+            .collect::<Vec<_>>();
+
+        assert_eq!(iterated, vec![1.0499993623489503, 0.0000018747718457656533]);
+    }
 }

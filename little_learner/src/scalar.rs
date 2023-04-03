@@ -237,6 +237,10 @@ impl<A> Scalar<A> {
     {
         Scalar::Dual(self.clone_real_part(), Link::EndOfLink(Some(index)))
     }
+
+    pub fn make(x: A) -> Scalar<A> {
+        Scalar::Number(x, None)
+    }
 }
 
 impl<A> Display for Scalar<A>
