@@ -126,7 +126,7 @@ where
         let dotted = RankedDifferentiable::of_scalar(
             dot_unranked(
                 left_arg.to_unranked_borrow(),
-                &Differentiable::Vector(theta.to_vec()),
+                &Differentiable::of_vec(theta.to_vec()),
             )
             .into_vector()
             .into_iter()
@@ -180,7 +180,7 @@ where
         );
         dot_unranked(
             x_powers.to_unranked_borrow(),
-            &Differentiable::Vector(theta.to_vec()),
+            &Differentiable::of_vec(theta.to_vec()),
         )
         .attach_rank::<1>()
         .expect("wanted a tensor1")
