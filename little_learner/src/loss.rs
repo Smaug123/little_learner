@@ -199,6 +199,9 @@ pub fn predict_plane<A>(
 where
     A: Mul<Output = A> + Add<Output = A> + Sum + Default + One + Zero + Clone,
 {
+    if theta[0].rank() != 1 {
+        panic!("theta0 must be of rank 1, got: {}", theta[0].rank())
+    }
     let theta0 = RankedDifferentiable::of_vector(
         theta[0]
             .borrow_vector()
