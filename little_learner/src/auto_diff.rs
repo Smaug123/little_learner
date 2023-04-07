@@ -121,17 +121,32 @@ impl<A> Differentiable<A> {
                 .collect(),
         )
     }
+
+    pub fn rank(&self) -> usize {
+        match self {
+            Differentiable::Scalar(_) => 0,
+            Differentiable::Vector(v) => v[0].rank() + 1,
+        }
+    }
+
+    pub fn attach_rank<const RANK: usize>(self: Differentiable<A>) -> Option<RankedDifferentiable<A, RANK>> {
+        if self.rank() == RANK {
+            Some(RankedDifferentiable { contents: self })
+        } else {
+            None
+        }
+    }
 }
 
 impl<A> Differentiable<A> {
-    pub fn as_scalar(self) -> Scalar<A> {
+    pub fn into_scalar(self) -> Scalar<A> {
         match self {
             Differentiable::Scalar(s) => s,
             Differentiable::Vector(_) => panic!("not a scalar"),
         }
     }
 
-    pub fn as_vector(self) -> Vec<Differentiable<A>> {
+    pub fn into_vector(self) -> Vec<Differentiable<A>> {
         match self {
             Differentiable::Scalar(_) => panic!("not a vector"),
             Differentiable::Vector(v) => v,
@@ -212,41 +227,45 @@ where
     }
 }
 
-pub fn of_scalar<A>(s: Scalar<A>) -> RankedDifferentiable<A, 0> {
-    RankedDifferentiable {
-        contents: Differentiable::Scalar(s),
-    }
-}
-
-pub fn of_slice<A, T>(input: T) -> RankedDifferentiable<A, 1>
-where
-    A: Clone,
-    T: AsRef<[A]>,
-{
-    RankedDifferentiable {
-        contents: Differentiable::of_slice(input),
-    }
-}
-
-pub fn of_slice_2<A, T, const N: usize>(input: &[T]) -> RankedDifferentiable<A, 2>
-where
-    A: Clone,
-    T: AsRef<[A]>,
-{
-    let v = input
-        .iter()
-        .map(|x| Differentiable::of_slice(x))
-        .collect::<Vec<_>>();
-    RankedDifferentiable {
-        contents: Differentiable::Vector(v),
-    }
-}
-
 impl<A> RankedDifferentiable<A, 0> {
     pub fn to_scalar(self) -> Scalar<A> {
         match self.contents {
             Differentiable::Scalar(s) => s,
             Differentiable::Vector(_) => panic!("not a scalar despite teq that we're a scalar"),
+        }
+    }
+
+    pub fn of_scalar(s: Scalar<A>) -> RankedDifferentiable<A, 0> {
+        RankedDifferentiable {
+            contents: Differentiable::Scalar(s),
+        }
+    }
+}
+
+impl<A> RankedDifferentiable<A, 1> {
+    pub fn of_slice<T>(input: T) -> RankedDifferentiable<A, 1>
+    where
+        A: Clone,
+        T: AsRef<[A]>,
+    {
+        RankedDifferentiable {
+            contents: Differentiable::of_slice(input),
+        }
+    }
+}
+
+impl<A> RankedDifferentiable<A, 2> {
+    pub fn of_slice_2<T, const N: usize>(input: &[T]) -> RankedDifferentiable<A, 2>
+    where
+        A: Clone,
+        T: AsRef<[A]>,
+    {
+        let v = input
+            .iter()
+            .map(|x| Differentiable::of_slice(x))
+            .collect::<Vec<_>>();
+        RankedDifferentiable {
+            contents: Differentiable::Vector(v),
         }
     }
 }
@@ -268,13 +287,13 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
         }
     }
 
-    pub fn map<B, F>(s: RankedDifferentiable<A, RANK>, f: &mut F) -> RankedDifferentiable<B, RANK>
+    pub fn map<B, F>(self: RankedDifferentiable<A, RANK>, f: &mut F) -> RankedDifferentiable<B, RANK>
     where
         F: FnMut(Scalar<A>) -> Scalar<B>,
         A: Clone,
     {
         RankedDifferentiable {
-            contents: Differentiable::map(&s.contents, f),
+            contents: Differentiable::map(&self.contents, f),
         }
     }
 
@@ -385,17 +404,17 @@ mod tests {
     #[test]
     fn test_autodiff() {
         let input_vec = [
-            of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
-            of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
+            RankedDifferentiable::of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
+            RankedDifferentiable::of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
         ];
         let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
         let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
         let grad = grad(
             |x| {
-                RankedDifferentiable::of_vector(vec![of_scalar(l2_loss_2(
+                RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                     predict_line_2_unranked,
-                    of_slice(&xs),
-                    of_slice(&ys),
+                    RankedDifferentiable::of_slice(&xs),
+                    RankedDifferentiable::of_slice(&ys),
                     x,
                 ))])
             },
@@ -403,7 +422,7 @@ mod tests {
         );
 
         let grad_vec = grad
-            .map(Differentiable::as_scalar)
+            .map(Differentiable::into_scalar)
             .map(|x| f64::from(*x.real_part()));
         assert_eq!(grad_vec, [-63.0, -21.0]);
     }

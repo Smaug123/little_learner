@@ -8,6 +8,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Neg};
 
 use little_learner::auto_diff::{grad, Differentiable, RankedDifferentiable};
 
+use little_learner::loss::{l2_loss_2, predict_plane};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{Exp, One, Zero};
 use ordered_float::NotNan;
@@ -78,21 +79,22 @@ fn main() {
         iterations: 1000,
     };
 
-    todo!();
-
-    /*
-
     let iterated = {
-        let xs = plane_xs.map(|x| [NotNan::new(x[0]).expect("not nan"), NotNan::new(x[1]).expect("not nan")]);
+        let xs = plane_xs.map(|x| {
+            [
+                NotNan::new(x[0]).expect("not nan"),
+                NotNan::new(x[1]).expect("not nan"),
+            ]
+        });
         let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
         iterate(
             &|theta| {
                 gradient_descent_step(
                     &|x| {
-                        RankedDifferentiable::of_vector(vec![of_scalar(l2_loss_2(
+                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                             predict_plane,
-                            of_slice_2::<_, _, 2>(&xs),
-                            of_slice(&ys),
+                            RankedDifferentiable::of_slice_2::<_, 2>(&xs),
+                            RankedDifferentiable::of_slice(&ys),
                             x,
                         ))])
                     },
@@ -100,23 +102,22 @@ fn main() {
                     &hyper,
                 )
             },
-            of_slice(&[
-                NotNan::<f64>::zero(),
-                NotNan::<f64>::zero(),
-                NotNan::<f64>::zero(),
-            ]),
+            [
+                Differentiable::Scalar(Scalar::zero()),
+                Differentiable::Scalar(Scalar::zero()),
+            ],
             hyper.iterations,
         )
     };
 
     println!(
-        "After iteration: {:?}",
-        Differentiable::to_vector(iterated)
+        "After iteration: {:?}, {:?}",
+        Differentiable::borrow_vector(&iterated[0])
             .into_iter()
-            .map(|x| x.as_scalar().real_part().into_inner())
-            .collect::<Vec<_>>()
+            .map(|x| x.borrow_scalar().real_part().into_inner())
+            .collect::<Vec<_>>(),
+        iterated[1]
     );
-    */
 }
 
 #[cfg(test)]
@@ -124,7 +125,7 @@ mod tests {
     use super::*;
     use arrayvec::ArrayVec;
     use little_learner::{
-        auto_diff::{grad, of_scalar, of_slice},
+        auto_diff::{grad},
         loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
     };
 
@@ -136,9 +137,9 @@ mod tests {
         let ys = [1.8, 1.2, 4.2, 3.3];
         let loss = l2_loss_2(
             predict_line_2,
-            of_slice(&xs),
-            of_slice(&ys),
-            &[of_scalar(Scalar::zero()), of_scalar(Scalar::zero())],
+            RankedDifferentiable::of_slice(&xs),
+            RankedDifferentiable::of_slice(&ys),
+            &[RankedDifferentiable::of_scalar(Scalar::zero()), RankedDifferentiable::of_scalar(Scalar::zero())],
         );
 
         assert_eq!(*loss.real_part(), 33.21);
@@ -159,11 +160,11 @@ mod tests {
         ))];
 
         let grad: Vec<_> = grad(
-            |x| of_scalar(x[0].borrow_scalar().clone() * x[0].borrow_scalar().clone()),
+            |x| RankedDifferentiable::of_scalar(x[0].borrow_scalar().clone() * x[0].borrow_scalar().clone()),
             &input_vec,
         )
         .into_iter()
-        .map(|x| x.as_scalar().real_part().into_inner())
+        .map(|x| x.into_scalar().real_part().into_inner())
         .collect();
         assert_eq!(grad, [54.0]);
     }
@@ -172,17 +173,17 @@ mod tests {
     fn loss_gradient() {
         let zero = Scalar::<NotNan<f64>>::zero();
         let input_vec = [
-            of_scalar(zero.clone()).to_unranked(),
-            of_scalar(zero).to_unranked(),
+            RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+            RankedDifferentiable::of_scalar(zero).to_unranked(),
         ];
         let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
         let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
         let grad = grad(
             |x| {
-                RankedDifferentiable::of_vector(vec![of_scalar(l2_loss_2(
+                RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                     predict_line_2_unranked,
-                    of_slice(&xs),
-                    of_slice(&ys),
+                    RankedDifferentiable::of_slice(&xs),
+                    RankedDifferentiable::of_slice(&ys),
                     x,
                 ))])
             },
@@ -191,7 +192,7 @@ mod tests {
 
         assert_eq!(
             grad.into_iter()
-                .map(|x| *(x.as_scalar().real_part()))
+                .map(|x| *(x.into_scalar().real_part()))
                 .collect::<Vec<_>>(),
             [-63.0, -21.0]
         );
@@ -227,10 +228,10 @@ mod tests {
                 &|theta| {
                     gradient_descent_step(
                         &|x| {
-                            RankedDifferentiable::of_vector(vec![of_scalar(l2_loss_2(
+                            RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                                 predict_line_2_unranked,
-                                of_slice(&xs),
-                                of_slice(&ys),
+                                RankedDifferentiable::of_slice(&xs),
+                                RankedDifferentiable::of_slice(&ys),
                                 x,
                             ))])
                         },
@@ -239,15 +240,15 @@ mod tests {
                     )
                 },
                 [
-                    of_scalar(zero.clone()).to_unranked(),
-                    of_scalar(zero).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero).to_unranked(),
                 ],
                 hyper.iterations,
             )
         };
         let iterated = iterated
             .into_iter()
-            .map(|x| x.as_scalar().real_part().into_inner())
+            .map(|x| x.into_scalar().real_part().into_inner())
             .collect::<Vec<_>>();
 
         assert_eq!(iterated, vec![1.0499993623489503, 0.0000018747718457656533]);
@@ -272,10 +273,10 @@ mod tests {
                 &|theta| {
                     gradient_descent_step(
                         &|x| {
-                            RankedDifferentiable::of_vector(vec![of_scalar(l2_loss_2(
+                            RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                                 predict_quadratic_unranked,
-                                of_slice(&xs),
-                                of_slice(&ys),
+                                RankedDifferentiable::of_slice(&xs),
+                                RankedDifferentiable::of_slice(&ys),
                                 x,
                             ))])
                         },
@@ -284,16 +285,16 @@ mod tests {
                     )
                 },
                 [
-                    of_scalar(zero.clone()).to_unranked(),
-                    of_scalar(zero.clone()).to_unranked(),
-                    of_scalar(zero).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero).to_unranked(),
                 ],
                 hyper.iterations,
             )
         };
         let iterated = iterated
             .into_iter()
-            .map(|x| x.as_scalar().real_part().into_inner())
+            .map(|x| x.into_scalar().real_part().into_inner())
             .collect::<Vec<_>>();
 
         assert_eq!(
