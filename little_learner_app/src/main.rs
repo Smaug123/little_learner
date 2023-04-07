@@ -134,7 +134,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrayvec::ArrayVec;
     use little_learner::{
         auto_diff::grad,
         loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
@@ -218,13 +217,7 @@ mod tests {
 
     #[test]
     fn test_iterate() {
-        let f = |t: [i32; 3]| {
-            let mut vec = ArrayVec::<i32, 3>::new();
-            for i in t {
-                vec.push(i - 3);
-            }
-            vec.into_inner().unwrap()
-        };
+        let f = |t: [i32; 3]| t.map(|i| i - 3);
         assert_eq!(iterate(&f, [1, 2, 3], 5u32), [-14, -13, -12]);
     }
 

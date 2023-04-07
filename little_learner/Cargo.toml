@@ -8,6 +8,5 @@ edition = "2021"
 [dependencies]
 immutable-chunkmap = "1.0.5"
 ordered-float = "3.6.0"
-arrayvec = "0.7.2"
 
 [lib]

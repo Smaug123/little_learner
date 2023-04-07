@@ -129,7 +129,9 @@ impl<A> Differentiable<A> {
         }
     }
 
-    pub fn attach_rank<const RANK: usize>(self: Differentiable<A>) -> Option<RankedDifferentiable<A, RANK>> {
+    pub fn attach_rank<const RANK: usize>(
+        self: Differentiable<A>,
+    ) -> Option<RankedDifferentiable<A, RANK>> {
         if self.rank() == RANK {
             Some(RankedDifferentiable { contents: self })
         } else {
@@ -287,7 +289,10 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
         }
     }
 
-    pub fn map<B, F>(self: RankedDifferentiable<A, RANK>, f: &mut F) -> RankedDifferentiable<B, RANK>
+    pub fn map<B, F>(
+        self: RankedDifferentiable<A, RANK>,
+        f: &mut F,
+    ) -> RankedDifferentiable<B, RANK>
     where
         F: FnMut(Scalar<A>) -> Scalar<B>,
         A: Clone,
