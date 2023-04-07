@@ -231,11 +231,11 @@ impl<A> Scalar<A> {
         }
     }
 
-    pub fn truncate_dual(self, index: usize) -> Scalar<A>
+    pub fn truncate_dual(self, index: Option<usize>) -> Scalar<A>
     where
         A: Clone,
     {
-        Scalar::Dual(self.clone_real_part(), Link::EndOfLink(Some(index)))
+        Scalar::Dual(self.clone_real_part(), Link::EndOfLink(index))
     }
 
     pub fn make(x: A) -> Scalar<A> {

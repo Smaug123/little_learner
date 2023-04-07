@@ -257,7 +257,7 @@ impl<A, const RANK: usize> Differentiable<A, RANK> {
     {
         let mut i = 0usize;
         let wrt = theta.contents.map(&mut |x| {
-            let result = Scalar::truncate_dual(x, i);
+            let result = Scalar::truncate_dual(x, Some(i));
             i += 1;
             result
         });
