@@ -17,10 +17,11 @@ fn iterate<A, F>(f: &F, start: A, n: u32) -> A
 where
     F: Fn(A) -> A,
 {
-    if n == 0 {
-        return start;
+    let mut v = start;
+    for _ in 0..n {
+        v = f(v);
     }
-    iterate(f, f(start), n - 1)
+    v
 }
 
 struct GradientDescentHyper<A, const RANK: usize> {
