@@ -7,12 +7,12 @@ use std::{
     ops::{AddAssign, Div, Mul, Neg},
 };
 
-impl<A> Zero for DifferentiableHidden<A>
+impl<A> Zero for Differentiable<A>
 where
     A: Zero,
 {
-    fn zero() -> DifferentiableHidden<A> {
-        DifferentiableHidden::Scalar(Scalar::Number(A::zero(), None))
+    fn zero() -> Differentiable<A> {
+        Differentiable::Scalar(Scalar::Number(A::zero(), None))
     }
 }
 
@@ -25,16 +25,16 @@ where
     }
 }
 
-impl<A> One for DifferentiableHidden<A>
+impl<A> One for Differentiable<A>
 where
     A: One,
 {
-    fn one() -> DifferentiableHidden<A> {
-        DifferentiableHidden::Scalar(Scalar::one())
+    fn one() -> Differentiable<A> {
+        Differentiable::Scalar(Scalar::one())
     }
 }
 
-impl<A> Clone for DifferentiableHidden<A>
+impl<A> Clone for Differentiable<A>
 where
     A: Clone,
 {
@@ -47,19 +47,19 @@ where
 }
 
 #[derive(Debug)]
-enum DifferentiableHidden<A> {
+pub enum Differentiable<A> {
     Scalar(Scalar<A>),
-    Vector(Vec<DifferentiableHidden<A>>),
+    Vector(Vec<Differentiable<A>>),
 }
 
-impl<A> Display for DifferentiableHidden<A>
+impl<A> Display for Differentiable<A>
 where
     A: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DifferentiableHidden::Scalar(s) => f.write_fmt(format_args!("{}", s)),
-            DifferentiableHidden::Vector(v) => {
+            Differentiable::Scalar(s) => f.write_fmt(format_args!("{}", s)),
+            Differentiable::Vector(v) => {
                 f.write_char('[')?;
                 for v in v.iter() {
                     f.write_fmt(format_args!("{}", v))?;
@@ -71,32 +71,32 @@ where
     }
 }
 
-impl<A> DifferentiableHidden<A> {
-    fn map<B, F>(&self, f: &mut F) -> DifferentiableHidden<B>
+impl<A> Differentiable<A> {
+    pub fn map<B, F>(&self, f: &mut F) -> Differentiable<B>
     where
         F: FnMut(Scalar<A>) -> Scalar<B>,
         A: Clone,
     {
         match self {
-            DifferentiableHidden::Scalar(a) => DifferentiableHidden::Scalar(f(a.clone())),
-            DifferentiableHidden::Vector(slice) => {
-                DifferentiableHidden::Vector(slice.iter().map(|x| x.map(f)).collect())
+            Differentiable::Scalar(a) => Differentiable::Scalar(f(a.clone())),
+            Differentiable::Vector(slice) => {
+                Differentiable::Vector(slice.iter().map(|x| x.map(f)).collect())
             }
         }
     }
 
-    fn map2<B, C, F>(&self, other: &DifferentiableHidden<B>, f: &F) -> DifferentiableHidden<C>
+    pub fn map2<B, C, F>(&self, other: &Differentiable<B>, f: &F) -> Differentiable<C>
     where
         F: Fn(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
         A: Clone,
         B: Clone,
     {
         match (self, other) {
-            (DifferentiableHidden::Scalar(a), DifferentiableHidden::Scalar(b)) => {
-                DifferentiableHidden::Scalar(f(a, b))
+            (Differentiable::Scalar(a), Differentiable::Scalar(b)) => {
+                Differentiable::Scalar(f(a, b))
             }
-            (DifferentiableHidden::Vector(slice_a), DifferentiableHidden::Vector(slice_b)) => {
-                DifferentiableHidden::Vector(
+            (Differentiable::Vector(slice_a), Differentiable::Vector(slice_b)) => {
+                Differentiable::Vector(
                     slice_a
                         .iter()
                         .zip(slice_b.iter())
@@ -108,20 +108,69 @@ impl<A> DifferentiableHidden<A> {
         }
     }
 
-    fn of_slice(input: &[A]) -> DifferentiableHidden<A>
+    fn of_slice<T>(input: T) -> Differentiable<A>
     where
         A: Clone,
+        T: AsRef<[A]>,
     {
-        DifferentiableHidden::Vector(
+        Differentiable::Vector(
             input
+                .as_ref()
                 .iter()
-                .map(|v| DifferentiableHidden::Scalar(Scalar::Number((*v).clone(), None)))
+                .map(|v| Differentiable::Scalar(Scalar::Number((*v).clone(), None)))
                 .collect(),
         )
     }
+
+    pub fn rank(&self) -> usize {
+        match self {
+            Differentiable::Scalar(_) => 0,
+            Differentiable::Vector(v) => v[0].rank() + 1,
+        }
+    }
+
+    pub fn attach_rank<const RANK: usize>(
+        self: Differentiable<A>,
+    ) -> Option<RankedDifferentiable<A, RANK>> {
+        if self.rank() == RANK {
+            Some(RankedDifferentiable { contents: self })
+        } else {
+            None
+        }
+    }
 }
 
-impl<A> DifferentiableHidden<A>
+impl<A> Differentiable<A> {
+    pub fn into_scalar(self) -> Scalar<A> {
+        match self {
+            Differentiable::Scalar(s) => s,
+            Differentiable::Vector(_) => panic!("not a scalar"),
+        }
+    }
+
+    pub fn into_vector(self) -> Vec<Differentiable<A>> {
+        match self {
+            Differentiable::Scalar(_) => panic!("not a vector"),
+            Differentiable::Vector(v) => v,
+        }
+    }
+
+    pub fn borrow_scalar(&self) -> &Scalar<A> {
+        match self {
+            Differentiable::Scalar(s) => s,
+            Differentiable::Vector(_) => panic!("not a scalar"),
+        }
+    }
+
+    pub fn borrow_vector(&self) -> &Vec<Differentiable<A>> {
+        match self {
+            Differentiable::Scalar(_) => panic!("not a vector"),
+            Differentiable::Vector(v) => v,
+        }
+    }
+}
+
+impl<A> Differentiable<A>
 where
     A: Clone
         + Eq
@@ -134,7 +183,7 @@ where
         + One
         + Neg<Output = A>,
 {
-    fn accumulate_gradients_vec(v: &[DifferentiableHidden<A>], acc: &mut HashMap<Scalar<A>, A>) {
+    fn accumulate_gradients_vec(v: &[Differentiable<A>], acc: &mut HashMap<Scalar<A>, A>) {
         for v in v.iter().rev() {
             v.accumulate_gradients(acc);
         }
@@ -142,33 +191,36 @@ where
 
     fn accumulate_gradients(&self, acc: &mut HashMap<Scalar<A>, A>) {
         match self {
-            DifferentiableHidden::Scalar(y) => {
+            Differentiable::Scalar(y) => {
                 let k = y.clone_link();
                 k.invoke(y, A::one(), acc);
             }
-            DifferentiableHidden::Vector(y) => {
-                DifferentiableHidden::accumulate_gradients_vec(y, acc)
-            }
+            Differentiable::Vector(y) => Differentiable::accumulate_gradients_vec(y, acc),
         }
     }
 
-    fn grad_once(self, wrt: &DifferentiableHidden<A>) -> DifferentiableHidden<A> {
+    fn grad_once<const PARAM_NUM: usize>(
+        self,
+        wrt: [Differentiable<A>; PARAM_NUM],
+    ) -> [Differentiable<A>; PARAM_NUM] {
         let mut acc = HashMap::new();
         self.accumulate_gradients(&mut acc);
 
-        wrt.map(&mut |d| match acc.get(&d) {
-            None => Scalar::Number(A::zero(), None),
-            Some(x) => Scalar::Number(x.clone(), None),
+        wrt.map(|wrt| {
+            wrt.map(&mut |d| match acc.get(&d) {
+                None => Scalar::Number(A::zero(), None),
+                Some(x) => Scalar::Number(x.clone(), None),
+            })
         })
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Differentiable<A, const RANK: usize> {
-    contents: DifferentiableHidden<A>,
+pub struct RankedDifferentiable<A, const RANK: usize> {
+    contents: Differentiable<A>,
 }
 
-impl<A, const RANK: usize> Display for Differentiable<A, RANK>
+impl<A, const RANK: usize> Display for RankedDifferentiable<A, RANK>
 where
     A: Display,
 {
@@ -177,123 +229,161 @@ where
     }
 }
 
-pub fn of_scalar<A>(s: Scalar<A>) -> Differentiable<A, 0> {
-    Differentiable {
-        contents: DifferentiableHidden::Scalar(s),
-    }
-}
-
-pub fn to_scalar<A>(s: Differentiable<A, 0>) -> Scalar<A> {
-    match s.contents {
-        DifferentiableHidden::Scalar(s) => s,
-        DifferentiableHidden::Vector(_) => panic!("not a vector"),
-    }
-}
-
-pub fn of_slice<A>(input: &[A]) -> Differentiable<A, 1>
-where
-    A: Clone,
-{
-    Differentiable {
-        contents: DifferentiableHidden::of_slice(input),
-    }
-}
-
-impl<A, const RANK: usize> Differentiable<A, RANK> {
-    pub fn of_vector(s: Vec<Differentiable<A, RANK>>) -> Differentiable<A, { RANK + 1 }> {
-        Differentiable {
-            contents: DifferentiableHidden::Vector(s.into_iter().map(|v| v.contents).collect()),
+impl<A> RankedDifferentiable<A, 0> {
+    pub fn to_scalar(self) -> Scalar<A> {
+        match self.contents {
+            Differentiable::Scalar(s) => s,
+            Differentiable::Vector(_) => panic!("not a scalar despite teq that we're a scalar"),
         }
     }
 
-    pub fn map<B, F>(s: Differentiable<A, RANK>, f: &mut F) -> Differentiable<B, RANK>
+    pub fn of_scalar(s: Scalar<A>) -> RankedDifferentiable<A, 0> {
+        RankedDifferentiable {
+            contents: Differentiable::Scalar(s),
+        }
+    }
+}
+
+impl<A> RankedDifferentiable<A, 1> {
+    pub fn of_slice<T>(input: T) -> RankedDifferentiable<A, 1>
+    where
+        A: Clone,
+        T: AsRef<[A]>,
+    {
+        RankedDifferentiable {
+            contents: Differentiable::of_slice(input),
+        }
+    }
+}
+
+impl<A> RankedDifferentiable<A, 2> {
+    pub fn of_slice_2<T, const N: usize>(input: &[T]) -> RankedDifferentiable<A, 2>
+    where
+        A: Clone,
+        T: AsRef<[A]>,
+    {
+        let v = input
+            .iter()
+            .map(|x| Differentiable::of_slice(x))
+            .collect::<Vec<_>>();
+        RankedDifferentiable {
+            contents: Differentiable::Vector(v),
+        }
+    }
+}
+
+impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
+    pub fn to_unranked(self) -> Differentiable<A> {
+        self.contents
+    }
+
+    pub fn to_unranked_borrow(&self) -> &Differentiable<A> {
+        &self.contents
+    }
+
+    pub fn of_vector(
+        s: Vec<RankedDifferentiable<A, RANK>>,
+    ) -> RankedDifferentiable<A, { RANK + 1 }> {
+        RankedDifferentiable {
+            contents: Differentiable::Vector(s.into_iter().map(|v| v.contents).collect()),
+        }
+    }
+
+    pub fn map<B, F>(
+        self: RankedDifferentiable<A, RANK>,
+        f: &mut F,
+    ) -> RankedDifferentiable<B, RANK>
     where
         F: FnMut(Scalar<A>) -> Scalar<B>,
         A: Clone,
     {
-        Differentiable {
-            contents: DifferentiableHidden::map(&s.contents, f),
+        RankedDifferentiable {
+            contents: Differentiable::map(&self.contents, f),
         }
     }
 
     pub fn map2<B, C, F>(
-        self: &Differentiable<A, RANK>,
-        other: &Differentiable<B, RANK>,
+        self: &RankedDifferentiable<A, RANK>,
+        other: &RankedDifferentiable<B, RANK>,
         f: &F,
-    ) -> Differentiable<C, RANK>
+    ) -> RankedDifferentiable<C, RANK>
     where
         F: Fn(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
         A: Clone,
         B: Clone,
     {
-        Differentiable {
-            contents: DifferentiableHidden::map2(&self.contents, &other.contents, f),
+        RankedDifferentiable {
+            contents: Differentiable::map2(&self.contents, &other.contents, f),
         }
     }
 
-    pub fn to_vector(s: Differentiable<A, { RANK + 1 }>) -> Vec<Differentiable<A, RANK>> {
-        match s.contents {
-            DifferentiableHidden::Scalar(_) => panic!("not a scalar"),
-            DifferentiableHidden::Vector(v) => v
+    pub fn to_vector(
+        self: RankedDifferentiable<A, RANK>,
+    ) -> Vec<RankedDifferentiable<A, { RANK - 1 }>> {
+        match self.contents {
+            Differentiable::Scalar(_) => panic!("not a scalar"),
+            Differentiable::Vector(v) => v
                 .into_iter()
-                .map(|v| Differentiable { contents: v })
+                .map(|v| RankedDifferentiable { contents: v })
                 .collect(),
         }
     }
+}
 
-    pub fn grad<F>(f: F, theta: &Differentiable<A, RANK>) -> Differentiable<A, RANK>
-    where
-        F: Fn(Differentiable<A, RANK>) -> Differentiable<A, RANK>,
-        A: Clone
-            + Hash
-            + AddAssign
-            + Mul<Output = A>
-            + Exp
-            + Div<Output = A>
-            + Zero
-            + One
-            + Neg<Output = A>
-            + Eq,
-    {
-        let mut i = 0usize;
-        let wrt = theta.contents.map(&mut |x| {
+pub fn grad<A, F, const RANK: usize, const PARAM_RANK: usize>(
+    f: F,
+    theta: &[Differentiable<A>; PARAM_RANK],
+) -> [Differentiable<A>; PARAM_RANK]
+where
+    F: Fn(&[Differentiable<A>; PARAM_RANK]) -> RankedDifferentiable<A, RANK>,
+    A: ?Sized
+        + Clone
+        + Hash
+        + AddAssign
+        + Mul<Output = A>
+        + Exp
+        + Div<Output = A>
+        + Zero
+        + One
+        + Neg<Output = A>
+        + Eq,
+{
+    let mut i = 0usize;
+    let wrt = theta.each_ref().map(|theta| {
+        theta.map(&mut |x| {
             let result = Scalar::truncate_dual(x, Some(i));
             i += 1;
             result
-        });
-        let after_f = f(Differentiable {
-            contents: wrt.clone(),
-        });
-        Differentiable {
-            contents: DifferentiableHidden::grad_once(after_f.contents, &wrt),
-        }
-    }
+        })
+    });
+    let after_f = f(&wrt);
+    Differentiable::grad_once(after_f.contents, wrt)
 }
 
 #[cfg(test)]
 mod tests {
     use ordered_float::NotNan;
 
-    use crate::loss::{l2_loss_2, predict_line_2};
+    use crate::loss::{l2_loss_2, predict_line_2_unranked};
 
     use super::*;
 
-    fn extract_scalar<'a, A>(d: &'a DifferentiableHidden<A>) -> &'a A {
+    fn extract_scalar<'a, A>(d: &'a Differentiable<A>) -> &'a A {
         match d {
-            DifferentiableHidden::Scalar(a) => &(a.real_part()),
-            DifferentiableHidden::Vector(_) => panic!("not a scalar"),
+            Differentiable::Scalar(a) => &(a.real_part()),
+            Differentiable::Vector(_) => panic!("not a scalar"),
         }
     }
 
     #[test]
     fn test_map() {
-        let v = DifferentiableHidden::Vector(
+        let v = Differentiable::Vector(
             vec![
-                DifferentiableHidden::Scalar(Scalar::Number(
+                Differentiable::Scalar(Scalar::Number(
                     NotNan::new(3.0).expect("3 is not NaN"),
                     Some(0usize),
                 )),
-                DifferentiableHidden::Scalar(Scalar::Number(
+                Differentiable::Scalar(Scalar::Number(
                     NotNan::new(4.0).expect("4 is not NaN"),
                     Some(1usize),
                 )),
@@ -306,8 +396,8 @@ mod tests {
         });
 
         let v = match mapped {
-            DifferentiableHidden::Scalar(_) => panic!("Not a scalar"),
-            DifferentiableHidden::Vector(v) => v
+            Differentiable::Scalar(_) => panic!("Not a scalar"),
+            Differentiable::Vector(v) => v
                 .iter()
                 .map(|d| extract_scalar(d).clone())
                 .collect::<Vec<_>>(),
@@ -318,26 +408,27 @@ mod tests {
 
     #[test]
     fn test_autodiff() {
-        let input_vec = of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()]);
+        let input_vec = [
+            RankedDifferentiable::of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
+            RankedDifferentiable::of_scalar(Scalar::<NotNan<f64>>::zero()).contents,
+        ];
         let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
         let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
-        let grad = Differentiable::grad(
+        let grad = grad(
             |x| {
-                Differentiable::of_vector(vec![of_scalar(l2_loss_2(
-                    predict_line_2,
-                    of_slice(&xs),
-                    of_slice(&ys),
+                RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
+                    predict_line_2_unranked,
+                    RankedDifferentiable::of_slice(&xs),
+                    RankedDifferentiable::of_slice(&ys),
                     x,
                 ))])
             },
             &input_vec,
         );
 
-        let grad_vec: Vec<f64> = Differentiable::to_vector(grad)
-            .into_iter()
-            .map(to_scalar)
-            .map(|x| f64::from(*x.real_part()))
-            .collect();
-        assert_eq!(grad_vec, vec![-63.0, -21.0]);
+        let grad_vec = grad
+            .map(Differentiable::into_scalar)
+            .map(|x| f64::from(*x.real_part()));
+        assert_eq!(grad_vec, [-63.0, -21.0]);
     }
 }
