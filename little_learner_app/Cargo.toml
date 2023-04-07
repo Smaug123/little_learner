@@ -9,4 +9,3 @@ edition = "2021"
 immutable-chunkmap = "1.0.5"
 ordered-float = "3.6.0"
 little_learner = { path = "../little_learner" }
-arrayvec = "0.7.2"

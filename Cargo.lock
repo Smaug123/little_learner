@@ -56,7 +56,6 @@ dependencies = [
 name = "little_learner_app"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "immutable-chunkmap",
  "little_learner",
  "ordered-float",
