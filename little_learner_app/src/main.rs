@@ -106,7 +106,7 @@ fn main() {
             },
             [
                 RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
-                Differentiable::Scalar(Scalar::zero()),
+                Differentiable::of_scalar(Scalar::zero()),
             ],
             hyper.iterations,
         )
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn grad_example() {
-        let input_vec = [Differentiable::Scalar(Scalar::make(
+        let input_vec = [Differentiable::of_scalar(Scalar::make(
             NotNan::new(27.0).expect("not nan"),
         ))];
 
@@ -362,7 +362,7 @@ mod tests {
                 },
                 [
                     RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
-                    Differentiable::Scalar(Scalar::zero()),
+                    Differentiable::of_scalar(Scalar::zero()),
                 ],
                 hyper.iterations,
             )
