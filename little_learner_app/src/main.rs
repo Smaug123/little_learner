@@ -15,7 +15,7 @@ use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
 use ordered_float::NotNan;
 
-fn iterate<A, F>(f: &mut F, start: A, n: u32) -> A
+fn iterate<A, F>(mut f: F, start: A, n: u32) -> A
 where
     F: FnMut(A) -> A,
 {
@@ -75,7 +75,7 @@ where
 {
     let iterations = hyper.iterations;
     iterate(
-        &mut |theta| {
+        |theta| {
             gradient_descent_step(
                 &mut |x| match hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
@@ -266,8 +266,8 @@ mod tests {
 
     #[test]
     fn test_iterate() {
-        let mut f = |t: [i32; 3]| t.map(|i| i - 3);
-        assert_eq!(iterate(&mut f, [1, 2, 3], 5u32), [-14, -13, -12]);
+        let f = |t: [i32; 3]| t.map(|i| i - 3);
+        assert_eq!(iterate(f, [1, 2, 3], 5u32), [-14, -13, -12]);
     }
 
     #[test]
