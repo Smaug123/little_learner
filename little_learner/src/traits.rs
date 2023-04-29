@@ -1,4 +1,5 @@
 use ordered_float::NotNan;
+use std::ops::{Add, AddAssign, Div, Mul, Neg};
 
 pub trait Exp {
     fn exp(self) -> Self;
@@ -41,3 +42,18 @@ impl One for NotNan<f64> {
         NotNan::new(1.0).unwrap()
     }
 }
+
+pub trait NumLike:
+    One
+    + Zero
+    + Exp
+    + Add<Output = Self>
+    + AddAssign
+    + Neg<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Sized
+{
+}
+
+impl NumLike for NotNan<f64> {}

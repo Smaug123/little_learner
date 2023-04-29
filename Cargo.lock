@@ -72,7 +72,6 @@ version = "0.1.0"
 dependencies = [
  "immutable-chunkmap",
  "ordered-float",
- "rand",
 ]
 
 [[package]]
@@ -82,6 +81,7 @@ dependencies = [
  "immutable-chunkmap",
  "little_learner",
  "ordered-float",
+ "rand",
 ]
 
 [[package]]
