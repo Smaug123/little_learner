@@ -128,6 +128,17 @@ where
     xs.map(to_not_nan_1)
 }
 
+fn collect_vec<T>(input: RankedDifferentiable<NotNan<T>, 1>) -> Vec<T>
+where
+    T: Copy,
+{
+    input
+        .to_vector()
+        .into_iter()
+        .map(|x| x.to_scalar().real_part().into_inner())
+        .collect::<Vec<_>>()
+}
+
 fn main() {
     let plane_xs = [
         [1.0, 2.05],
@@ -168,14 +179,7 @@ fn main() {
     let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
     let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
 
-    assert_eq!(
-        theta0
-            .to_vector()
-            .into_iter()
-            .map(|x| x.to_scalar().real_part().into_inner())
-            .collect::<Vec<_>>(),
-        [3.97757644609063, 2.0496557321494446]
-    );
+    assert_eq!(collect_vec(theta0), [3.97757644609063, 2.0496557321494446]);
     assert_eq!(
         theta1.to_scalar().real_part().into_inner(),
         5.786758464448078
@@ -386,14 +390,7 @@ mod tests {
         let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
         let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
 
-        assert_eq!(
-            theta0
-                .to_vector()
-                .into_iter()
-                .map(|x| x.to_scalar().real_part().into_inner())
-                .collect::<Vec<_>>(),
-            [3.97757644609063, 2.0496557321494446]
-        );
+        assert_eq!(collect_vec(theta0), [3.97757644609063, 2.0496557321494446]);
         assert_eq!(
             theta1.to_scalar().real_part().into_inner(),
             5.786758464448078
