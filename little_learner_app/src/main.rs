@@ -114,6 +114,20 @@ where
     )
 }
 
+fn to_not_nan_1<T, const N: usize>(xs: [T; N]) -> [NotNan<T>; N]
+where
+    T: ordered_float::Float,
+{
+    xs.map(|x| NotNan::new(x).expect("not nan"))
+}
+
+fn to_not_nan_2<T, const N: usize, const M: usize>(xs: [[T; N]; M]) -> [[NotNan<T>; N]; M]
+where
+    T: ordered_float::Float,
+{
+    xs.map(to_not_nan_1)
+}
+
 fn main() {
     let plane_xs = [
         [1.0, 2.05],
@@ -131,13 +145,8 @@ fn main() {
     };
 
     let iterated = {
-        let xs = plane_xs.map(|x| {
-            [
-                NotNan::new(x[0]).expect("not nan"),
-                NotNan::new(x[1]).expect("not nan"),
-            ]
-        });
-        let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
+        let xs = to_not_nan_2(plane_xs);
+        let ys = to_not_nan_1(plane_ys);
         let zero_params = [
             RankedDifferentiable::of_slice([NotNan::<f64>::zero(), NotNan::<f64>::zero()])
                 .to_unranked(),
@@ -235,8 +244,8 @@ mod tests {
             RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
             RankedDifferentiable::of_scalar(zero).to_unranked(),
         ];
-        let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
-        let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
+        let xs = to_not_nan_1([2.0, 1.0, 4.0, 3.0]);
+        let ys = to_not_nan_1([1.8, 1.2, 4.2, 3.3]);
         let grad = grad(
             |x| {
                 RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
@@ -275,8 +284,8 @@ mod tests {
             iterations: 1000,
         };
         let iterated = {
-            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
-            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
+            let xs = to_not_nan_1(xs);
+            let ys = to_not_nan_1(ys);
             let zero_params = [
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
@@ -311,8 +320,8 @@ mod tests {
         };
 
         let iterated = {
-            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
-            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
+            let xs = to_not_nan_1(xs);
+            let ys = to_not_nan_1(ys);
             let zero_params = [
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
@@ -356,13 +365,8 @@ mod tests {
         };
 
         let iterated = {
-            let xs = plane_xs.map(|x| {
-                [
-                    NotNan::new(x[0]).expect("not nan"),
-                    NotNan::new(x[1]).expect("not nan"),
-                ]
-            });
-            let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
+            let xs = to_not_nan_2(plane_xs);
+            let ys = to_not_nan_1(plane_ys);
             let zero_params = [
                 RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
