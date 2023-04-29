@@ -10,7 +10,7 @@ use rand::Rng;
 use little_learner::auto_diff::{grad, Differentiable, RankedDifferentiable};
 
 use crate::sample::sample2;
-use little_learner::loss::{l2_loss_2, predict_plane};
+use little_learner::loss::{l2_loss_2, plane_predictor, Predictor};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
 use ordered_float::NotNan;
@@ -47,7 +47,7 @@ where
         let delta = &delta[i];
         i += 1;
         // For speed, you might want to truncate_dual this.
-        let learning_rate = Scalar::make(learning_rate.clone());
+        let learning_rate = Scalar::make(learning_rate);
         Differentiable::map2(
             &theta,
             &delta.map(&mut |s| s * learning_rate.clone()),
@@ -56,31 +56,41 @@ where
     })
 }
 
-fn gradient_descent<'a, T, R: Rng, Point, F, G, const IN_SIZE: usize, const PARAM_NUM: usize>(
+fn gradient_descent<
+    'a,
+    T,
+    R: Rng,
+    Point,
+    F,
+    G,
+    const IN_SIZE: usize,
+    const PARAM_NUM: usize,
+    const INFLATED_NUM: usize,
+>(
     mut hyper: GradientDescentHyper<T, R>,
     xs: &'a [Point],
     to_ranked_differentiable: G,
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    predict: F,
+    predictor: Predictor<F, [Differentiable<T>; INFLATED_NUM], [Differentiable<T>; PARAM_NUM]>,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
-    T: NumLike + Clone + Copy + Eq + std::iter::Sum + Default + Hash,
+    T: NumLike + Eq + Hash,
     Point: 'a + Copy,
     F: Fn(
         RankedDifferentiable<T, IN_SIZE>,
-        &[Differentiable<T>; PARAM_NUM],
+        &[Differentiable<T>; INFLATED_NUM],
     ) -> RankedDifferentiable<T, 1>,
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
 {
     let iterations = hyper.iterations;
     iterate(
         |theta| {
-            gradient_descent_step(
+            let out = gradient_descent_step::<T, _, 1, INFLATED_NUM>(
                 &mut |x| match hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
-                            &predict,
+                            &predictor.predict,
                             to_ranked_differentiable(xs),
                             RankedDifferentiable::of_slice(ys),
                             x,
@@ -90,7 +100,7 @@ where
                         let (sampled_xs, sampled_ys) = sample2(rng, *batch_size, xs, ys);
                         RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                             l2_loss_2(
-                                &predict,
+                                &predictor.predict,
                                 to_ranked_differentiable(&sampled_xs),
                                 RankedDifferentiable::of_slice(&sampled_ys),
                                 x,
@@ -98,9 +108,10 @@ where
                         )])
                     }
                 },
-                theta,
+                (predictor.inflate)(theta),
                 hyper.learning_rate,
-            )
+            );
+            (predictor.deflate)(out)
         },
         zero_params,
         iterations,
@@ -164,7 +175,7 @@ fn main() {
             RankedDifferentiable::of_slice_2::<_, 2>,
             &ys,
             zero_params,
-            predict_plane,
+            plane_predictor(),
         )
     };
 
@@ -185,7 +196,10 @@ mod tests {
     use super::*;
     use little_learner::{
         auto_diff::grad,
-        loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
+        loss::{
+            l2_loss_2, line_unranked_predictor, predict_line_2, predict_line_2_unranked,
+            quadratic_unranked_predictor,
+        },
     };
     use rand::SeedableRng;
 
@@ -296,7 +310,7 @@ mod tests {
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predict_line_2_unranked,
+                line_unranked_predictor(),
             )
         };
         let iterated = iterated
@@ -334,7 +348,7 @@ mod tests {
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predict_quadratic_unranked,
+                quadratic_unranked_predictor(),
             )
         };
         let iterated = iterated
@@ -379,7 +393,7 @@ mod tests {
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
-                predict_plane,
+                plane_predictor(),
             )
         };
 
@@ -417,7 +431,7 @@ mod tests {
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
-                predict_plane,
+                plane_predictor(),
             )
         };
 
