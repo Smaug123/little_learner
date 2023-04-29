@@ -63,6 +63,52 @@ where
     })
 }
 
+fn gradient_descent<T>(
+    hyper: GradientDescentHyper<T>,
+    xs: &[[T; 2]],
+    ys: &[T],
+) -> [Differentiable<T>; 2]
+where
+    T: Zero
+        + Clone
+        + Copy
+        + One
+        + Exp
+        + Div<Output = T>
+        + Eq
+        + std::iter::Sum
+        + Default
+        + Add<Output = T>
+        + Mul<Output = T>
+        + Neg<Output = T>
+        + AddAssign
+        + std::hash::Hash,
+{
+    iterate(
+        &|theta| {
+            gradient_descent_step(
+                &|x| {
+                    RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
+                        l2_loss_2(
+                            predict_plane,
+                            RankedDifferentiable::of_slice_2::<_, 2>(xs),
+                            RankedDifferentiable::of_slice(ys),
+                            x,
+                        ),
+                    )])
+                },
+                theta,
+                &hyper,
+            )
+        },
+        [
+            RankedDifferentiable::of_slice([T::zero(), T::zero()]).to_unranked(),
+            Differentiable::of_scalar(Scalar::zero()),
+        ],
+        hyper.iterations,
+    )
+}
+
 fn main() {
     let plane_xs = [
         [1.0, 2.05],
@@ -87,29 +133,7 @@ fn main() {
             ]
         });
         let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
-        iterate(
-            &|theta| {
-                gradient_descent_step(
-                    &|x| {
-                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                            l2_loss_2(
-                                predict_plane,
-                                RankedDifferentiable::of_slice_2::<_, 2>(&xs),
-                                RankedDifferentiable::of_slice(ys),
-                                x,
-                            ),
-                        )])
-                    },
-                    theta,
-                    &hyper,
-                )
-            },
-            [
-                RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
-                Differentiable::of_scalar(Scalar::zero()),
-            ],
-            hyper.iterations,
-        )
+        gradient_descent(hyper, &xs, &ys)
     };
 
     let [theta0, theta1] = iterated;
