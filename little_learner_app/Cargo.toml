@@ -9,3 +9,4 @@ edition = "2021"
 immutable-chunkmap = "1.0.5"
 ordered-float = "3.6.0"
 little_learner = { path = "../little_learner" }
+rand = "0.8.5"

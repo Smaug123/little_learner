@@ -115,9 +115,13 @@ impl<A> DifferentiableContents<A> {
         }
     }
 
-    fn map2<B, C, F>(&self, other: &DifferentiableContents<B>, f: &F) -> DifferentiableContents<C>
+    fn map2<B, C, F>(
+        &self,
+        other: &DifferentiableContents<B>,
+        f: &mut F,
+    ) -> DifferentiableContents<C>
     where
-        F: Fn(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
+        F: FnMut(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
         A: Clone,
         B: Clone,
     {
@@ -145,17 +149,16 @@ impl<A> DifferentiableContents<A> {
         }
     }
 
-    fn of_slice<T>(input: T) -> DifferentiableContents<A>
+    fn of_slice<'a, T, I>(input: I) -> DifferentiableContents<T>
     where
-        A: Clone,
-        T: AsRef<[A]>,
+        T: Clone + 'a,
+        I: IntoIterator<Item = &'a T>,
     {
         DifferentiableContents::Vector(
             input
-                .as_ref()
-                .iter()
+                .into_iter()
                 .map(|v| Differentiable {
-                    contents: DifferentiableContents::Scalar(Scalar::Number((*v).clone(), None)),
+                    contents: DifferentiableContents::Scalar(Scalar::Number(v.clone(), None)),
                 })
                 .collect(),
             1,
@@ -181,9 +184,9 @@ impl<A> Differentiable<A> {
         }
     }
 
-    pub fn map2<B, C, F>(&self, other: &Differentiable<B>, f: &F) -> Differentiable<C>
+    pub fn map2<B, C, F>(&self, other: &Differentiable<B>, f: &mut F) -> Differentiable<C>
     where
-        F: Fn(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
+        F: FnMut(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
         A: Clone,
         B: Clone,
     {
@@ -256,13 +259,13 @@ impl<A> Differentiable<A> {
         self.contents.borrow_vector()
     }
 
-    fn of_slice<T>(input: T) -> Differentiable<A>
+    fn of_slice<'a, T>(input: T) -> Differentiable<A>
     where
-        A: Clone,
-        T: AsRef<[A]>,
+        A: Clone + 'a,
+        T: IntoIterator<Item = &'a A>,
     {
         Differentiable {
-            contents: DifferentiableContents::of_slice(input),
+            contents: DifferentiableContents::<A>::of_slice(input),
         }
     }
 
@@ -355,14 +358,14 @@ impl<A> RankedDifferentiable<A, 0> {
 }
 
 impl<A> RankedDifferentiable<A, 1> {
-    pub fn of_slice<T>(input: T) -> RankedDifferentiable<A, 1>
+    pub fn of_slice<'a, T>(input: T) -> RankedDifferentiable<A, 1>
     where
-        A: Clone,
-        T: AsRef<[A]>,
+        A: Clone + 'a,
+        T: IntoIterator<Item = &'a A>,
     {
         RankedDifferentiable {
             contents: Differentiable {
-                contents: DifferentiableContents::of_slice(input),
+                contents: DifferentiableContents::<A>::of_slice(input),
             },
         }
     }
@@ -376,7 +379,7 @@ impl<A> RankedDifferentiable<A, 2> {
     {
         let v = input
             .iter()
-            .map(|x| Differentiable::of_slice(x))
+            .map(|x| Differentiable::of_slice(x.as_ref()))
             .collect::<Vec<_>>();
         RankedDifferentiable {
             contents: Differentiable::of_vec(v),
@@ -417,10 +420,10 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
     pub fn map2<B, C, F>(
         self: &RankedDifferentiable<A, RANK>,
         other: &RankedDifferentiable<B, RANK>,
-        f: &F,
+        f: &mut F,
     ) -> RankedDifferentiable<C, RANK>
     where
-        F: Fn(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
+        F: FnMut(&Scalar<A>, &Scalar<B>) -> Scalar<C>,
         A: Clone,
         B: Clone,
     {
@@ -441,11 +444,11 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
 }
 
 pub fn grad<A, F, const RANK: usize, const PARAM_RANK: usize>(
-    f: F,
+    mut f: F,
     theta: &[Differentiable<A>; PARAM_RANK],
 ) -> [Differentiable<A>; PARAM_RANK]
 where
-    F: Fn(&[Differentiable<A>; PARAM_RANK]) -> RankedDifferentiable<A, RANK>,
+    F: FnMut(&[Differentiable<A>; PARAM_RANK]) -> RankedDifferentiable<A, RANK>,
     A: ?Sized
         + Clone
         + Hash
@@ -478,7 +481,7 @@ mod tests {
 
     use super::*;
 
-    fn extract_scalar<'a, A>(d: &'a Differentiable<A>) -> &'a A {
+    fn extract_scalar<A>(d: &Differentiable<A>) -> &A {
         d.borrow_scalar().real_part()
     }
 
@@ -523,8 +526,8 @@ mod tests {
             |x| {
                 RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
                     predict_line_2_unranked,
-                    RankedDifferentiable::of_slice(&xs),
-                    RankedDifferentiable::of_slice(&ys),
+                    RankedDifferentiable::of_slice(xs.iter()),
+                    RankedDifferentiable::of_slice(ys.iter()),
                     x,
                 ))])
             },

@@ -1,21 +1,23 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+mod sample;
 mod with_tensor;
 
 use core::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Neg};
+use rand::Rng;
 
 use little_learner::auto_diff::{grad, Differentiable, RankedDifferentiable};
 
+use crate::sample::sample2;
 use little_learner::loss::{l2_loss_2, predict_plane};
 use little_learner::scalar::Scalar;
-use little_learner::traits::{Exp, One, Zero};
+use little_learner::traits::{NumLike, Zero};
 use ordered_float::NotNan;
 
-fn iterate<A, F>(f: &F, start: A, n: u32) -> A
+fn iterate<A, F>(mut f: F, start: A, n: u32) -> A
 where
-    F: Fn(A) -> A,
+    F: FnMut(A) -> A,
 {
     let mut v = start;
     for _ in 0..n {
@@ -24,29 +26,20 @@ where
     v
 }
 
-struct GradientDescentHyper<A> {
+struct GradientDescentHyper<A, R: Rng> {
     learning_rate: A,
     iterations: u32,
+    sampling: Option<(R, usize)>,
 }
 
 fn gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
-    f: &F,
+    f: &mut F,
     theta: [Differentiable<A>; PARAM_NUM],
-    params: &GradientDescentHyper<A>,
+    learning_rate: A,
 ) -> [Differentiable<A>; PARAM_NUM]
 where
-    A: Clone
-        + Mul<Output = A>
-        + Neg<Output = A>
-        + Add<Output = A>
-        + Hash
-        + AddAssign
-        + Div<Output = A>
-        + Zero
-        + One
-        + Eq
-        + Exp,
-    F: Fn(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
+    A: Clone + NumLike + Hash + Eq,
+    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
 {
     let delta = grad(f, &theta);
     let mut i = 0;
@@ -54,13 +47,89 @@ where
         let delta = &delta[i];
         i += 1;
         // For speed, you might want to truncate_dual this.
-        let learning_rate = Scalar::make((params.learning_rate).clone());
+        let learning_rate = Scalar::make(learning_rate.clone());
         Differentiable::map2(
             &theta,
             &delta.map(&mut |s| s * learning_rate.clone()),
-            &|theta, delta| (*theta).clone() - (*delta).clone(),
+            &mut |theta, delta| (*theta).clone() - (*delta).clone(),
         )
     })
+}
+
+fn gradient_descent<'a, T, R: Rng, Point, F, G, const IN_SIZE: usize, const PARAM_NUM: usize>(
+    mut hyper: GradientDescentHyper<T, R>,
+    xs: &'a [Point],
+    to_ranked_differentiable: G,
+    ys: &[T],
+    zero_params: [Differentiable<T>; PARAM_NUM],
+    predict: F,
+) -> [Differentiable<T>; PARAM_NUM]
+where
+    T: NumLike + Clone + Copy + Eq + std::iter::Sum + Default + Hash,
+    Point: 'a + Copy,
+    F: Fn(
+        RankedDifferentiable<T, IN_SIZE>,
+        &[Differentiable<T>; PARAM_NUM],
+    ) -> RankedDifferentiable<T, 1>,
+    G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+{
+    let iterations = hyper.iterations;
+    iterate(
+        |theta| {
+            gradient_descent_step(
+                &mut |x| match hyper.sampling.as_mut() {
+                    None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
+                        l2_loss_2(
+                            &predict,
+                            to_ranked_differentiable(xs),
+                            RankedDifferentiable::of_slice(ys),
+                            x,
+                        ),
+                    )]),
+                    Some((rng, batch_size)) => {
+                        let (sampled_xs, sampled_ys) = sample2(rng, *batch_size, xs, ys);
+                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
+                            l2_loss_2(
+                                &predict,
+                                to_ranked_differentiable(&sampled_xs),
+                                RankedDifferentiable::of_slice(&sampled_ys),
+                                x,
+                            ),
+                        )])
+                    }
+                },
+                theta,
+                hyper.learning_rate,
+            )
+        },
+        zero_params,
+        iterations,
+    )
+}
+
+fn to_not_nan_1<T, const N: usize>(xs: [T; N]) -> [NotNan<T>; N]
+where
+    T: ordered_float::Float,
+{
+    xs.map(|x| NotNan::new(x).expect("not nan"))
+}
+
+fn to_not_nan_2<T, const N: usize, const M: usize>(xs: [[T; N]; M]) -> [[NotNan<T>; N]; M]
+where
+    T: ordered_float::Float,
+{
+    xs.map(to_not_nan_1)
+}
+
+fn collect_vec<T>(input: RankedDifferentiable<NotNan<T>, 1>) -> Vec<T>
+where
+    T: Copy,
+{
+    input
+        .to_vector()
+        .into_iter()
+        .map(|x| x.to_scalar().real_part().into_inner())
+        .collect::<Vec<_>>()
 }
 
 fn main() {
@@ -77,38 +146,25 @@ fn main() {
     let hyper = GradientDescentHyper {
         learning_rate: NotNan::new(0.001).expect("not nan"),
         iterations: 1000,
+        sampling: None::<(rand::rngs::StdRng, _)>,
     };
 
     let iterated = {
-        let xs = plane_xs.map(|x| {
-            [
-                NotNan::new(x[0]).expect("not nan"),
-                NotNan::new(x[1]).expect("not nan"),
-            ]
-        });
-        let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
-        iterate(
-            &|theta| {
-                gradient_descent_step(
-                    &|x| {
-                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                            l2_loss_2(
-                                predict_plane,
-                                RankedDifferentiable::of_slice_2::<_, 2>(&xs),
-                                RankedDifferentiable::of_slice(ys),
-                                x,
-                            ),
-                        )])
-                    },
-                    theta,
-                    &hyper,
-                )
-            },
-            [
-                RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
-                Differentiable::of_scalar(Scalar::zero()),
-            ],
-            hyper.iterations,
+        let xs = to_not_nan_2(plane_xs);
+        let ys = to_not_nan_1(plane_ys);
+        let zero_params = [
+            RankedDifferentiable::of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()])
+                .to_unranked(),
+            Differentiable::of_scalar(Scalar::zero()),
+        ];
+
+        gradient_descent(
+            hyper,
+            &xs,
+            RankedDifferentiable::of_slice_2::<_, 2>,
+            &ys,
+            zero_params,
+            predict_plane,
         )
     };
 
@@ -117,14 +173,7 @@ fn main() {
     let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
     let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
 
-    assert_eq!(
-        theta0
-            .to_vector()
-            .into_iter()
-            .map(|x| x.to_scalar().real_part().into_inner())
-            .collect::<Vec<_>>(),
-        [3.97757644609063, 2.0496557321494446]
-    );
+    assert_eq!(collect_vec(theta0), [3.97757644609063, 2.0496557321494446]);
     assert_eq!(
         theta1.to_scalar().real_part().into_inner(),
         5.786758464448078
@@ -138,6 +187,7 @@ mod tests {
         auto_diff::grad,
         loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
     };
+    use rand::SeedableRng;
 
     use crate::with_tensor::{l2_loss, predict_line};
 
@@ -193,8 +243,8 @@ mod tests {
             RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
             RankedDifferentiable::of_scalar(zero).to_unranked(),
         ];
-        let xs = [2.0, 1.0, 4.0, 3.0].map(|x| NotNan::new(x).expect("not nan"));
-        let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
+        let xs = to_not_nan_1([2.0, 1.0, 4.0, 3.0]);
+        let ys = to_not_nan_1([1.8, 1.2, 4.2, 3.3]);
         let grad = grad(
             |x| {
                 RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
@@ -218,7 +268,7 @@ mod tests {
     #[test]
     fn test_iterate() {
         let f = |t: [i32; 3]| t.map(|i| i - 3);
-        assert_eq!(iterate(&f, [1, 2, 3], 5u32), [-14, -13, -12]);
+        assert_eq!(iterate(f, [1, 2, 3], 5u32), [-14, -13, -12]);
     }
 
     #[test]
@@ -231,32 +281,22 @@ mod tests {
         let hyper = GradientDescentHyper {
             learning_rate: NotNan::new(0.01).expect("not nan"),
             iterations: 1000,
+            sampling: None::<(rand::rngs::StdRng, _)>,
         };
         let iterated = {
-            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
-            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
-            iterate(
-                &|theta| {
-                    gradient_descent_step(
-                        &|x| {
-                            RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                                l2_loss_2(
-                                    predict_line_2_unranked,
-                                    RankedDifferentiable::of_slice(&xs),
-                                    RankedDifferentiable::of_slice(&ys),
-                                    x,
-                                ),
-                            )])
-                        },
-                        theta,
-                        &hyper,
-                    )
-                },
-                [
-                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
-                    RankedDifferentiable::of_scalar(zero).to_unranked(),
-                ],
-                hyper.iterations,
+            let xs = to_not_nan_1(xs);
+            let ys = to_not_nan_1(ys);
+            let zero_params = [
+                RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                RankedDifferentiable::of_scalar(zero).to_unranked(),
+            ];
+            gradient_descent(
+                hyper,
+                &xs,
+                |b| RankedDifferentiable::of_slice(b),
+                &ys,
+                zero_params,
+                predict_line_2_unranked,
             )
         };
         let iterated = iterated
@@ -277,34 +317,24 @@ mod tests {
         let hyper = GradientDescentHyper {
             learning_rate: NotNan::new(0.001).expect("not nan"),
             iterations: 1000,
+            sampling: None::<(rand::rngs::StdRng, _)>,
         };
 
         let iterated = {
-            let xs = xs.map(|x| NotNan::new(x).expect("not nan"));
-            let ys = ys.map(|x| NotNan::new(x).expect("not nan"));
-            iterate(
-                &|theta| {
-                    gradient_descent_step(
-                        &|x| {
-                            RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                                l2_loss_2(
-                                    predict_quadratic_unranked,
-                                    RankedDifferentiable::of_slice(&xs),
-                                    RankedDifferentiable::of_slice(&ys),
-                                    x,
-                                ),
-                            )])
-                        },
-                        theta,
-                        &hyper,
-                    )
-                },
-                [
-                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
-                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
-                    RankedDifferentiable::of_scalar(zero).to_unranked(),
-                ],
-                hyper.iterations,
+            let xs = to_not_nan_1(xs);
+            let ys = to_not_nan_1(ys);
+            let zero_params = [
+                RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                RankedDifferentiable::of_scalar(zero).to_unranked(),
+            ];
+            gradient_descent(
+                hyper,
+                &xs,
+                |b| RankedDifferentiable::of_slice(b),
+                &ys,
+                zero_params,
+                predict_quadratic_unranked,
             )
         };
         let iterated = iterated
@@ -318,53 +348,38 @@ mod tests {
         );
     }
 
+    const PLANE_XS: [[f64; 2]; 6] = [
+        [1.0, 2.05],
+        [1.0, 3.0],
+        [2.0, 2.0],
+        [2.0, 3.91],
+        [3.0, 6.13],
+        [4.0, 8.09],
+    ];
+    const PLANE_YS: [f64; 6] = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
+
     #[test]
     fn optimise_plane() {
-        let plane_xs = [
-            [1.0, 2.05],
-            [1.0, 3.0],
-            [2.0, 2.0],
-            [2.0, 3.91],
-            [3.0, 6.13],
-            [4.0, 8.09],
-        ];
-        let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
-
         let hyper = GradientDescentHyper {
             learning_rate: NotNan::new(0.001).expect("not nan"),
             iterations: 1000,
+            sampling: None::<(rand::rngs::StdRng, _)>,
         };
 
         let iterated = {
-            let xs = plane_xs.map(|x| {
-                [
-                    NotNan::new(x[0]).expect("not nan"),
-                    NotNan::new(x[1]).expect("not nan"),
-                ]
-            });
-            let ys = plane_ys.map(|x| NotNan::new(x).expect("not nan"));
-            iterate(
-                &|theta| {
-                    gradient_descent_step(
-                        &|x| {
-                            RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                                l2_loss_2(
-                                    predict_plane,
-                                    RankedDifferentiable::of_slice_2::<_, 2>(&xs),
-                                    RankedDifferentiable::of_slice(ys),
-                                    x,
-                                ),
-                            )])
-                        },
-                        theta,
-                        &hyper,
-                    )
-                },
-                [
-                    RankedDifferentiable::of_slice([NotNan::zero(), NotNan::zero()]).to_unranked(),
-                    Differentiable::of_scalar(Scalar::zero()),
-                ],
-                hyper.iterations,
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiable::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                predict_plane,
             )
         };
 
@@ -373,17 +388,74 @@ mod tests {
         let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
         let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
 
-        assert_eq!(
-            theta0
-                .to_vector()
-                .into_iter()
-                .map(|x| x.to_scalar().real_part().into_inner())
-                .collect::<Vec<_>>(),
-            [3.97757644609063, 2.0496557321494446]
-        );
+        assert_eq!(collect_vec(theta0), [3.97757644609063, 2.0496557321494446]);
         assert_eq!(
             theta1.to_scalar().real_part().into_inner(),
             5.786758464448078
         );
+    }
+
+    #[test]
+    fn optimise_plane_with_sampling() {
+        let rng = rand::rngs::StdRng::seed_from_u64(314159);
+        let hyper = GradientDescentHyper {
+            learning_rate: NotNan::new(0.001).expect("not nan"),
+            iterations: 1000,
+            sampling: Some((rng, 4)),
+        };
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiable::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                predict_plane,
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = collect_vec(theta0.attach_rank::<1>().expect("rank 1 tensor"));
+        let theta1 = theta1
+            .attach_rank::<0>()
+            .expect("rank 0 tensor")
+            .to_scalar()
+            .real_part()
+            .into_inner();
+
+        /*
+           Mathematica code to verify by eye that the optimisation gave a reasonable result:
+
+        xs = {{1.0, 2.05}, {1.0, 3.0}, {2.0, 2.0}, {2.0, 3.91}, {3.0,
+            6.13}, {4.0, 8.09}};
+        ys = {13.99, 15.99, 18.0, 22.4, 30.2, 37.94};
+        points = ListPointPlot3D[Append @@@ Transpose[{xs, ys}]];
+
+        withoutBatching0 = {3.97757644609063, 2.0496557321494446};
+        withoutBatching1 = 5.2839863438547159;
+        withoutBatching =
+            Plot3D[{x, y} . withoutBatching0 + withoutBatching1, {x, 0, 4}, {y,
+            0, 8}];
+
+        withBatching0 = {3.8581694055684781, 2.2166222673968554};
+        withBatching1 = 5.2399202468216668;
+        withBatching =
+            Plot3D[{x, y} . withBatching0 + withBatching1, {x, 0, 4}, {y, 0, 8}];
+
+        Show[points, withoutBatching]
+
+        Show[points, withBatching]
+         */
+
+        assert_eq!(theta0, [3.8581694055684781, 2.2166222673968554]);
+        assert_eq!(theta1, 5.2839863438547159);
     }
 }

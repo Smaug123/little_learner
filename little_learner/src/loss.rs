@@ -23,14 +23,14 @@ pub fn elementwise_mul<A, const RANK: usize>(
 where
     A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
-    RankedDifferentiable::map2(x, y, &|x, y| x.clone() * y.clone())
+    RankedDifferentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
 }
 
 pub fn dot_unranked<A>(x: &Differentiable<A>, y: &Differentiable<A>) -> Differentiable<A>
 where
     A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
-    Differentiable::map2(x, y, &|x, y| x.clone() * y.clone())
+    Differentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
 }
 
 fn squared_2<A, const RANK: usize>(
@@ -39,7 +39,7 @@ fn squared_2<A, const RANK: usize>(
 where
     A: Mul<Output = A> + Copy + Default,
 {
-    RankedDifferentiable::map2(x, x, &|x, y| x.clone() * y.clone())
+    RankedDifferentiable::map2(x, x, &mut |x, y| x.clone() * y.clone())
 }
 
 fn sum_2<A>(x: RankedDifferentiable<A, 1>) -> Scalar<A>
@@ -59,7 +59,7 @@ fn l2_norm_2<A>(
 where
     A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero + Neg,
 {
-    let diff = RankedDifferentiable::map2(prediction, data, &|x, y| x.clone() - y.clone());
+    let diff = RankedDifferentiable::map2(prediction, data, &mut |x, y| x.clone() - y.clone());
     sum_2(squared_2(&diff))
 }
 
