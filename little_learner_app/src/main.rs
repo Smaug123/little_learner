@@ -187,7 +187,7 @@ mod tests {
         auto_diff::grad,
         loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
     };
-    use rand::thread_rng;
+    use rand::SeedableRng;
 
     use crate::with_tensor::{l2_loss, predict_line};
 
@@ -397,9 +397,7 @@ mod tests {
 
     #[test]
     fn optimise_plane_with_sampling() {
-        let mut seed = [0];
-        let mut rng = thread_rng();
-        rng.fill(&mut seed);
+        let rng = rand::rngs::StdRng::seed_from_u64(314159);
         let hyper = GradientDescentHyper {
             learning_rate: NotNan::new(0.001).expect("not nan"),
             iterations: 1000,
@@ -442,12 +440,12 @@ mod tests {
         points = ListPointPlot3D[Append @@@ Transpose[{xs, ys}]];
 
         withoutBatching0 = {3.97757644609063, 2.0496557321494446};
-        withoutBatching1 = 5.786758464448078;
+        withoutBatching1 = 5.2839863438547159;
         withoutBatching =
             Plot3D[{x, y} . withoutBatching0 + withoutBatching1, {x, 0, 4}, {y,
             0, 8}];
 
-        withBatching0 = {3.8363801506074346, 2.2072061501375};
+        withBatching0 = {3.8581694055684781, 2.2166222673968554};
         withBatching1 = 5.2399202468216668;
         withBatching =
             Plot3D[{x, y} . withBatching0 + withBatching1, {x, 0, 4}, {y, 0, 8}];
@@ -457,7 +455,7 @@ mod tests {
         Show[points, withBatching]
          */
 
-        assert_eq!(theta0, [3.8363801506074346, 2.2072061501375]);
-        assert_eq!(theta1, 5.2399202468216668);
+        assert_eq!(theta0, [3.8581694055684781, 2.2166222673968554]);
+        assert_eq!(theta1, 5.2839863438547159);
     }
 }
