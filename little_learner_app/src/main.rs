@@ -187,6 +187,7 @@ mod tests {
         auto_diff::grad,
         loss::{l2_loss_2, predict_line_2, predict_line_2_unranked, predict_quadratic_unranked},
     };
+    use rand::thread_rng;
 
     use crate::with_tensor::{l2_loss, predict_line};
 
@@ -347,18 +348,18 @@ mod tests {
         );
     }
 
+    const PLANE_XS: [[f64; 2]; 6] = [
+        [1.0, 2.05],
+        [1.0, 3.0],
+        [2.0, 2.0],
+        [2.0, 3.91],
+        [3.0, 6.13],
+        [4.0, 8.09],
+    ];
+    const PLANE_YS: [f64; 6] = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
+
     #[test]
     fn optimise_plane() {
-        let plane_xs = [
-            [1.0, 2.05],
-            [1.0, 3.0],
-            [2.0, 2.0],
-            [2.0, 3.91],
-            [3.0, 6.13],
-            [4.0, 8.09],
-        ];
-        let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
-
         let hyper = GradientDescentHyper {
             learning_rate: NotNan::new(0.001).expect("not nan"),
             iterations: 1000,
@@ -366,8 +367,8 @@ mod tests {
         };
 
         let iterated = {
-            let xs = to_not_nan_2(plane_xs);
-            let ys = to_not_nan_1(plane_ys);
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
             let zero_params = [
                 RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
@@ -392,5 +393,71 @@ mod tests {
             theta1.to_scalar().real_part().into_inner(),
             5.786758464448078
         );
+    }
+
+    #[test]
+    fn optimise_plane_with_sampling() {
+        let mut seed = [0];
+        let mut rng = thread_rng();
+        rng.fill(&mut seed);
+        let hyper = GradientDescentHyper {
+            learning_rate: NotNan::new(0.001).expect("not nan"),
+            iterations: 1000,
+            sampling: Some((rng, 4)),
+        };
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiable::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                predict_plane,
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = collect_vec(theta0.attach_rank::<1>().expect("rank 1 tensor"));
+        let theta1 = theta1
+            .attach_rank::<0>()
+            .expect("rank 0 tensor")
+            .to_scalar()
+            .real_part()
+            .into_inner();
+
+        /*
+           Mathematica code to verify by eye that the optimisation gave a reasonable result:
+
+        xs = {{1.0, 2.05}, {1.0, 3.0}, {2.0, 2.0}, {2.0, 3.91}, {3.0,
+            6.13}, {4.0, 8.09}};
+        ys = {13.99, 15.99, 18.0, 22.4, 30.2, 37.94};
+        points = ListPointPlot3D[Append @@@ Transpose[{xs, ys}]];
+
+        withoutBatching0 = {3.97757644609063, 2.0496557321494446};
+        withoutBatching1 = 5.786758464448078;
+        withoutBatching =
+            Plot3D[{x, y} . withoutBatching0 + withoutBatching1, {x, 0, 4}, {y,
+            0, 8}];
+
+        withBatching0 = {3.8363801506074346, 2.2072061501375};
+        withBatching1 = 5.2399202468216668;
+        withBatching =
+            Plot3D[{x, y} . withBatching0 + withBatching1, {x, 0, 4}, {y, 0, 8}];
+
+        Show[points, withoutBatching]
+
+        Show[points, withBatching]
+         */
+
+        assert_eq!(theta0, [3.8363801506074346, 2.2072061501375]);
+        assert_eq!(theta1, 5.2399202468216668);
     }
 }
