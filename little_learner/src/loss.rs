@@ -3,6 +3,7 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
+use crate::traits::NumLike;
 use crate::{
     auto_diff::{Differentiable, RankedDifferentiable},
     scalar::Scalar,
@@ -217,4 +218,52 @@ where
         .map(|x| RankedDifferentiable::of_scalar(x + theta1.clone()))
         .collect();
     RankedDifferentiable::of_vector(dotted)
+}
+
+pub struct Predictor<F, Inflated, Deflated> {
+    pub predict: F,
+    pub inflate: fn(Deflated) -> Inflated,
+    pub deflate: fn(Inflated) -> Deflated,
+}
+
+type ParameterPredictor<T, const INPUT_DIM: usize, const THETA: usize> =
+    fn(
+        RankedDifferentiable<T, INPUT_DIM>,
+        &[Differentiable<T>; THETA],
+    ) -> RankedDifferentiable<T, 1>;
+
+pub const fn plane_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 2, 2>, [Differentiable<T>; 2], [Differentiable<T>; 2]>
+where
+    T: NumLike + Default,
+{
+    Predictor {
+        predict: predict_plane,
+        inflate: |x| x,
+        deflate: |x| x,
+    }
+}
+
+pub const fn line_unranked_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 1, 2>, [Differentiable<T>; 2], [Differentiable<T>; 2]>
+where
+    T: NumLike + Default,
+{
+    Predictor {
+        predict: predict_line_2_unranked,
+        inflate: |x| x,
+        deflate: |x| x,
+    }
+}
+
+pub const fn quadratic_unranked_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 1, 3>, [Differentiable<T>; 3], [Differentiable<T>; 3]>
+where
+    T: NumLike + Default,
+{
+    Predictor {
+        predict: predict_quadratic_unranked,
+        inflate: |x| x,
+        deflate: |x| x,
+    }
 }

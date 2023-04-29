@@ -1,4 +1,5 @@
 use ordered_float::NotNan;
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Neg};
 
 pub trait Exp {
@@ -52,6 +53,10 @@ pub trait NumLike:
     + Neg<Output = Self>
     + Mul<Output = Self>
     + Div<Output = Self>
+    + Sum
+    + Default
+    + Clone
+    + Copy
     + Sized
 {
 }
