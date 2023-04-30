@@ -125,4 +125,12 @@ mod tests {
         );
         assert_eq!((100.0 * loss).round() / 100.0, 32.59);
     }
+
+    #[test]
+    fn l2_loss_non_autodiff_example() {
+        let xs = [2.0, 1.0, 4.0, 3.0];
+        let ys = [1.8, 1.2, 4.2, 3.3];
+        let loss = l2_loss(predict_line, &xs, &ys, &[0.0099, 0.0]);
+        assert_eq!(loss, 32.5892403);
+    }
 }

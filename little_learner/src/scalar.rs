@@ -14,6 +14,7 @@ pub enum LinkData<A> {
     Mul(Box<Scalar<A>>, Box<Scalar<A>>),
     Exponent(Box<Scalar<A>>),
     Log(Box<Scalar<A>>),
+    Div(Box<Scalar<A>>, Box<Scalar<A>>),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -41,6 +42,9 @@ where
                 f.write_fmt(format_args!("exp({})", arg.as_ref()))
             }
             Link::Link(LinkData::Log(arg)) => f.write_fmt(format_args!("log({})", arg.as_ref())),
+            Link::Link(LinkData::Div(left, right)) => {
+                f.write_fmt(format_args!("({} / {})", left.as_ref(), right.as_ref()))
+            }
         }
     }
 }
@@ -96,6 +100,21 @@ impl<A> Link<A> {
                             .clone_link()
                             .invoke(&right, left.clone_real_part() * z, acc);
                     }
+                    LinkData::Div(left, right) => {
+                        // d/dx(f / g) = f d(1/g)/dx + (df/dx) / g
+                        //             = -f (dg/dx)/g^2 + (df/dx) / g
+                        left.as_ref().clone_link().invoke(
+                            &left,
+                            z.clone() / right.clone_real_part(),
+                            acc,
+                        );
+                        right.as_ref().clone_link().invoke(
+                            &right,
+                            -left.clone_real_part() * z
+                                / (right.clone_real_part() * right.clone_real_part()),
+                            acc,
+                        )
+                    }
                     LinkData::Log(arg) => {
                         // d/dx(log y) = 1/y dy/dx
                         arg.as_ref().clone_link().invoke(
@@ -141,6 +160,15 @@ where
             self.clone_real_part() + rhs.clone_real_part(),
             Link::Link(LinkData::Addition(Box::new(self), Box::new(rhs))),
         )
+    }
+}
+
+impl<A> AddAssign for Scalar<A>
+where
+    A: Add<Output = A> + Clone,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        *self = self.clone() + rhs
     }
 }
 
@@ -190,9 +218,44 @@ where
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         let mut answer = Zero::zero();
         for i in iter {
-            answer = answer + i;
+            answer += i;
         }
         answer
+    }
+}
+
+impl<A> Exp for Scalar<A>
+where
+    A: Exp + Clone,
+{
+    fn exp(self) -> Self {
+        Self::Dual(
+            self.clone_real_part().exp(),
+            Link::Link(LinkData::Exponent(Box::new(self))),
+        )
+    }
+}
+
+impl<A> Div for Scalar<A>
+where
+    A: Div<Output = A> + Clone,
+{
+    type Output = Scalar<A>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Self::Dual(
+            self.clone_real_part() / rhs.clone_real_part(),
+            Link::Link(LinkData::Div(Box::new(self), Box::new(rhs))),
+        )
+    }
+}
+
+impl<A> Default for Scalar<A>
+where
+    A: Default,
+{
+    fn default() -> Self {
+        Scalar::Number(A::default(), None)
     }
 }
 
@@ -252,6 +315,42 @@ where
             Scalar::Number(n, Some(index)) => f.write_fmt(format_args!("{}_{}", n, index)),
             Scalar::Number(n, None) => f.write_fmt(format_args!("{}", n)),
             Scalar::Dual(n, link) => f.write_fmt(format_args!("<{}, link: {}>", n, link)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_loss {
+    use crate::scalar::Scalar;
+    use ordered_float::NotNan;
+    use std::collections::HashMap;
+
+    #[test]
+    fn div_gradient() {
+        let left = Scalar::make(NotNan::new(3.0).expect("not nan"));
+        let right = Scalar::make(NotNan::new(5.0).expect("not nan"));
+        let divided = left / right;
+        assert_eq!(divided.clone_real_part().into_inner(), 3.0 / 5.0);
+        let mut acc = HashMap::new();
+        divided
+            .clone_link()
+            .invoke(&divided, NotNan::new(1.0).expect("not nan"), &mut acc);
+
+        // Derivative of x/5 with respect to x is the constant 1/5
+        // Derivative of 3/x with respect to x is -3/x^2, so at the value 5 is -3/25
+        assert_eq!(acc.len(), 2);
+        for (key, value) in acc {
+            let key = key.real_part().into_inner();
+            let value = value.into_inner();
+            if key < 4.0 {
+                // This is the numerator.
+                assert_eq!(key, 3.0);
+                assert_eq!(value, 1.0 / 5.0);
+            } else {
+                // This is the denominator.
+                assert_eq!(key, 5.0);
+                assert_eq!(value, -3.0 / 25.0);
+            }
         }
     }
 }
