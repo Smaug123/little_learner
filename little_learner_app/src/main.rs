@@ -51,6 +51,58 @@ impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
     }
 }
 
+fn naked_gradient_descent<A>(
+    hyper: &GradientDescentHyperImmut<A>,
+    theta: Differentiable<A>,
+    delta: &Differentiable<A>,
+) -> Differentiable<A>
+    where
+        A: NumLike,
+{
+    let learning_rate = Scalar::make(hyper.learning_rate.clone());
+    general_gradient_descent(
+        theta,
+        |theta| theta,
+        |theta, delta| theta.clone() - delta.clone() * learning_rate.clone(),
+        delta,
+    )
+}
+
+fn velocity_gradient_descent<A>(
+    hyper: &GradientDescentHyperImmut<A>,
+    theta: (Differentiable<A>, Scalar<A>),
+    delta: &Differentiable<A>,
+) -> Differentiable<A>
+    where
+        A: NumLike,
+{
+    let learning_rate = Scalar::make(hyper.learning_rate.clone());
+    let velocity = theta.1.clone();
+    general_gradient_descent(
+        theta,
+        |(theta, _)| theta,
+        |theta, delta| {
+            theta.clone() + Scalar::make(hyper.mu.clone()) * velocity.clone()
+                - delta.clone() * learning_rate.clone()
+        },
+        delta,
+    )
+}
+
+fn general_gradient_descent<A, Inflated, Deflate, Adjust>(
+    theta: Inflated,
+    mut deflate: Deflate,
+    mut adjust: Adjust,
+    delta: &Differentiable<A>,
+) -> Differentiable<A>
+    where
+        A: NumLike,
+        Deflate: FnMut(Inflated) -> Differentiable<A>,
+        Adjust: FnMut(&Scalar<A>, &Scalar<A>) -> Scalar<A>,
+{
+    Differentiable::map2(&deflate(theta), delta, &mut adjust)
+}
+
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
 fn general_gradient_descent_step<
     A,
@@ -117,58 +169,6 @@ where
         |(x, _)| x,
         |theta, delta| velocity_gradient_descent(&hyper, theta, delta),
     )
-}
-
-fn naked_gradient_descent<A>(
-    hyper: &GradientDescentHyperImmut<A>,
-    theta: Differentiable<A>,
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
-where
-    A: NumLike,
-{
-    let learning_rate = Scalar::make(hyper.learning_rate.clone());
-    general_gradient_descent(
-        theta,
-        |theta| theta,
-        |theta, delta| theta.clone() - delta.clone() * learning_rate.clone(),
-        delta,
-    )
-}
-
-fn velocity_gradient_descent<A>(
-    hyper: &GradientDescentHyperImmut<A>,
-    theta: (Differentiable<A>, Scalar<A>),
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
-where
-    A: NumLike,
-{
-    let learning_rate = Scalar::make(hyper.learning_rate.clone());
-    let velocity = theta.1.clone();
-    general_gradient_descent(
-        theta,
-        |(theta, _)| theta,
-        |theta, delta| {
-            theta.clone() + Scalar::make(hyper.mu.clone()) * velocity.clone()
-                - delta.clone() * learning_rate.clone()
-        },
-        delta,
-    )
-}
-
-fn general_gradient_descent<A, Inflated, Deflate, Adjust>(
-    theta: Inflated,
-    mut deflate: Deflate,
-    mut adjust: Adjust,
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
-where
-    A: NumLike,
-    Deflate: FnMut(Inflated) -> Differentiable<A>,
-    Adjust: FnMut(&Scalar<A>, &Scalar<A>) -> Scalar<A>,
-{
-    Differentiable::map2(&deflate(theta), delta, &mut adjust)
 }
 
 fn gradient_descent<'a, T, R: Rng, Point, F, G, const IN_SIZE: usize, const PARAM_NUM: usize>(
