@@ -3,9 +3,10 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
+use crate::auto_diff::Differentiable;
 use crate::traits::NumLike;
 use crate::{
-    auto_diff::{Differentiable, RankedDifferentiable},
+    auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
     traits::{One, Zero},
 };
@@ -27,11 +28,27 @@ where
     RankedDifferentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
 }
 
+pub fn dot_unranked_tagged<A, Tag1, Tag2, Tag3, F>(
+    x: &DifferentiableTagged<A, Tag1>,
+    y: &DifferentiableTagged<A, Tag2>,
+    mut combine_tags: F,
+) -> DifferentiableTagged<A, Tag3>
+where
+    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
+    F: FnMut(Tag1, Tag2) -> Tag3,
+    Tag1: Clone,
+    Tag2: Clone,
+{
+    DifferentiableTagged::map2_tagged(x, y, &mut |x, tag1, y, tag2| {
+        (x.clone() * y.clone(), combine_tags(tag1, tag2))
+    })
+}
+
 pub fn dot_unranked<A>(x: &Differentiable<A>, y: &Differentiable<A>) -> Differentiable<A>
 where
     A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
-    Differentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
+    dot_unranked_tagged(x, y, |(), ()| ())
 }
 
 fn squared_2<A, const RANK: usize>(
@@ -127,7 +144,7 @@ where
         let dotted = RankedDifferentiable::of_scalar(
             dot_unranked(
                 left_arg.to_unranked_borrow(),
-                &Differentiable::of_vec(theta.to_vec()),
+                &DifferentiableTagged::of_vec(theta.to_vec()),
             )
             .into_vector()
             .into_iter()
@@ -181,7 +198,7 @@ where
         );
         dot_unranked(
             x_powers.to_unranked_borrow(),
-            &Differentiable::of_vec(theta.to_vec()),
+            &DifferentiableTagged::of_vec(theta.to_vec()),
         )
         .attach_rank::<1>()
         .expect("wanted a tensor1")
@@ -241,6 +258,18 @@ where
         predict: predict_plane,
         inflate: |x| x,
         deflate: |x| x,
+    }
+}
+
+pub const fn velocity_plane_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 2, 2>, DifferentiableTagged<T, T>, Differentiable<T>>
+where
+    T: NumLike + Default,
+{
+    Predictor {
+        predict: predict_plane,
+        inflate: |x| x.map_tag(&mut |()| T::zero()),
+        deflate: |x| x.map_tag(&mut |_| ()),
     }
 }
 

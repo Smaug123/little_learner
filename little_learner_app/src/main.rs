@@ -7,10 +7,12 @@ mod with_tensor;
 use core::hash::Hash;
 use rand::Rng;
 
-use little_learner::auto_diff::{grad, Differentiable, RankedDifferentiable};
+use little_learner::auto_diff::{
+    grad, Differentiable, DifferentiableTagged, RankedDifferentiable, RankedDifferentiableTagged,
+};
 
 use crate::sample::sample2;
-use little_learner::loss::{l2_loss_2, plane_predictor, Predictor};
+use little_learner::loss::{l2_loss_2, velocity_plane_predictor, Predictor};
 use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
@@ -52,18 +54,20 @@ impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
     }
 }
 
-fn general_gradient_descent<A, Inflated, Deflate, Adjust>(
+fn general_gradient_descent_tagged<A, Tag1, Tag2, Tag3, Inflated, Deflate, Adjust>(
     theta: Inflated,
+    delta: &DifferentiableTagged<A, Tag2>,
     mut deflate: Deflate,
     mut adjust: Adjust,
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
+) -> DifferentiableTagged<A, Tag3>
 where
     A: NumLike,
-    Deflate: FnMut(Inflated) -> Differentiable<A>,
-    Adjust: FnMut(&Scalar<A>, &Scalar<A>) -> Scalar<A>,
+    Deflate: FnMut(Inflated) -> DifferentiableTagged<A, Tag1>,
+    Adjust: FnMut(&Scalar<A>, Tag1, &Scalar<A>, Tag2) -> (Scalar<A>, Tag3),
+    Tag1: Clone,
+    Tag2: Clone,
 {
-    Differentiable::map2(&deflate(theta), delta, &mut adjust)
+    DifferentiableTagged::map2_tagged(&deflate(theta), delta, &mut adjust)
 }
 
 fn naked_gradient_descent<A>(
@@ -75,36 +79,31 @@ where
     A: NumLike,
 {
     let learning_rate = Scalar::make(hyper.learning_rate.clone());
-    general_gradient_descent(
-        theta,
-        |theta| theta,
-        |theta, delta| theta.clone() - delta.clone() * learning_rate.clone(),
-        delta,
-    )
+    Differentiable::map2(&theta, delta, &mut |theta, delta| {
+        theta.clone() - delta.clone() * learning_rate.clone()
+    })
 }
 
-/*
 fn velocity_gradient_descent<A>(
     hyper: &GradientDescentHyperImmut<A>,
-    theta: (Differentiable<A>, Scalar<A>),
+    theta: DifferentiableTagged<A, A>,
     delta: &Differentiable<A>,
-) -> (Differentiable<A>, Scalar<A>)
-    where
-        A: NumLike,
+) -> DifferentiableTagged<A, A>
+where
+    A: NumLike,
 {
-    let learning_rate = Scalar::make(hyper.learning_rate.clone());
-    let velocity = theta.1.clone();
-    general_gradient_descent(
+    let learning_rate = hyper.learning_rate.clone();
+    general_gradient_descent_tagged(
         theta,
-        |(theta, _)| theta,
-        |theta, delta| {
-            theta.clone() + Scalar::make(hyper.mu.clone()) * velocity.clone()
-                - delta.clone() * learning_rate.clone()
-        },
         delta,
+        |theta| theta,
+        |theta, velocity, delta, ()| {
+            let velocity =
+                hyper.mu.clone() * velocity + -(delta.clone_real_part() * learning_rate.clone());
+            (theta.clone() + Scalar::make(velocity.clone()), velocity)
+        },
     )
 }
- */
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
 fn general_gradient_descent_step<
@@ -137,28 +136,6 @@ where
         adjust(inflated, delta)
     })
 }
-
-/*
-/// Each input `theta` is expected to be enriched with its "velocity" as well:
-/// how much that parameter changed on the previous tick.
-fn velocity_gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
-    f: &mut F,
-    theta: [(Differentiable<A>, Scalar<A>); PARAM_NUM],
-    hyper: &GradientDescentHyperImmut<A>,
-) -> [(Differentiable<A>, Scalar<A>); PARAM_NUM]
-where
-    A: Clone + NumLike + Hash + Eq,
-    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
-{
-    general_gradient_descent_step(
-        f,
-        theta,
-        |(x, _)| x,
-        |theta, delta| velocity_gradient_descent(&hyper, theta, delta),
-    )
-}
-
- */
 
 fn gradient_descent<
     'a,
@@ -252,7 +229,7 @@ fn main() {
     let mut hyper = GradientDescentHyper::new(
         NotNan::new(0.001).expect("not nan"),
         1000,
-        NotNan::new(0.0).expect("not nan"),
+        NotNan::new(0.9).expect("not nan"),
     );
 
     let iterated = {
@@ -269,11 +246,11 @@ fn main() {
         gradient_descent(
             &mut hyper,
             &xs,
-            RankedDifferentiable::of_slice_2::<_, 2>,
+            RankedDifferentiableTagged::of_slice_2::<_, 2>,
             &ys,
             zero_params,
-            |theta, delta| naked_gradient_descent(&params, theta, delta),
-            plane_predictor(),
+            |theta, delta| velocity_gradient_descent(&params, theta, delta),
+            velocity_plane_predictor(),
         )
     };
 
@@ -282,17 +259,19 @@ fn main() {
     let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
     let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
 
-    assert_eq!(collect_vec(theta0), [3.97757644609063, 2.0496557321494446]);
+    assert_eq!(collect_vec(theta0), [3.979645447136021, 1.976454920954754]);
     assert_eq!(
         theta1.to_scalar().real_part().into_inner(),
-        5.786758464448078
+        6.169579045974949
     );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use little_learner::loss::{line_unranked_predictor, quadratic_unranked_predictor};
+    use little_learner::loss::{
+        line_unranked_predictor, plane_predictor, quadratic_unranked_predictor,
+    };
     use rand::SeedableRng;
 
     #[test]
@@ -498,5 +477,47 @@ mod tests {
 
         assert_eq!(theta0, [3.8581694055684781, 2.2166222673968554]);
         assert_eq!(theta1, 5.2839863438547159);
+    }
+
+    #[test]
+    fn test_with_velocity() {
+        let mut hyper = GradientDescentHyper::new(
+            NotNan::new(0.001).expect("not nan"),
+            1000,
+            NotNan::new(0.9).expect("not nan"),
+        );
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()])
+                    .to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+
+            let params = hyper.params.clone();
+
+            gradient_descent(
+                &mut hyper,
+                &xs,
+                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                |theta, delta| velocity_gradient_descent(&params, theta, delta),
+                velocity_plane_predictor(),
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
+        let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
+
+        assert_eq!(collect_vec(theta0), [3.979645447136021, 1.976454920954754]);
+        assert_eq!(
+            theta1.to_scalar().real_part().into_inner(),
+            6.169579045974949
+        );
     }
 }
