@@ -232,7 +232,8 @@ type ParameterPredictor<T, const INPUT_DIM: usize, const THETA: usize> =
         &[Differentiable<T>; THETA],
     ) -> RankedDifferentiable<T, 1>;
 
-pub const fn plane_predictor<T>() -> Predictor<ParameterPredictor<T, 2, 2>, Scalar<T>, Scalar<T>>
+pub const fn plane_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 2, 2>, Differentiable<T>, Differentiable<T>>
 where
     T: NumLike + Default,
 {
@@ -244,7 +245,7 @@ where
 }
 
 pub const fn line_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 2>, Scalar<T>, Scalar<T>>
+) -> Predictor<ParameterPredictor<T, 1, 2>, Differentiable<T>, Differentiable<T>>
 where
     T: NumLike + Default + Copy,
 {
@@ -256,7 +257,7 @@ where
 }
 
 pub const fn quadratic_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 3>, Scalar<T>, Scalar<T>>
+) -> Predictor<ParameterPredictor<T, 1, 3>, Differentiable<T>, Differentiable<T>>
 where
     T: NumLike + Default,
 {

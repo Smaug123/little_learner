@@ -27,6 +27,7 @@ where
     v
 }
 
+#[derive(Clone)]
 struct GradientDescentHyperImmut<A> {
     learning_rate: A,
     iterations: u32,
@@ -51,13 +52,27 @@ impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
     }
 }
 
+fn general_gradient_descent<A, Inflated, Deflate, Adjust>(
+    theta: Inflated,
+    mut deflate: Deflate,
+    mut adjust: Adjust,
+    delta: &Differentiable<A>,
+) -> Differentiable<A>
+where
+    A: NumLike,
+    Deflate: FnMut(Inflated) -> Differentiable<A>,
+    Adjust: FnMut(&Scalar<A>, &Scalar<A>) -> Scalar<A>,
+{
+    Differentiable::map2(&deflate(theta), delta, &mut adjust)
+}
+
 fn naked_gradient_descent<A>(
     hyper: &GradientDescentHyperImmut<A>,
     theta: Differentiable<A>,
     delta: &Differentiable<A>,
 ) -> Differentiable<A>
-    where
-        A: NumLike,
+where
+    A: NumLike,
 {
     let learning_rate = Scalar::make(hyper.learning_rate.clone());
     general_gradient_descent(
@@ -68,11 +83,12 @@ fn naked_gradient_descent<A>(
     )
 }
 
+/*
 fn velocity_gradient_descent<A>(
     hyper: &GradientDescentHyperImmut<A>,
     theta: (Differentiable<A>, Scalar<A>),
     delta: &Differentiable<A>,
-) -> Differentiable<A>
+) -> (Differentiable<A>, Scalar<A>)
     where
         A: NumLike,
 {
@@ -88,20 +104,7 @@ fn velocity_gradient_descent<A>(
         delta,
     )
 }
-
-fn general_gradient_descent<A, Inflated, Deflate, Adjust>(
-    theta: Inflated,
-    mut deflate: Deflate,
-    mut adjust: Adjust,
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
-    where
-        A: NumLike,
-        Deflate: FnMut(Inflated) -> Differentiable<A>,
-        Adjust: FnMut(&Scalar<A>, &Scalar<A>) -> Scalar<A>,
-{
-    Differentiable::map2(&deflate(theta), delta, &mut adjust)
-}
+ */
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
 fn general_gradient_descent_step<
@@ -117,13 +120,13 @@ fn general_gradient_descent_step<
     theta: [Inflated; PARAM_NUM],
     deflate: Deflate,
     mut adjust: Adjust,
-) -> [Differentiable<A>; PARAM_NUM]
+) -> [Inflated; PARAM_NUM]
 where
     A: Clone + NumLike + Hash + Eq,
     F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
     Deflate: FnMut(Inflated) -> Differentiable<A>,
     Inflated: Clone,
-    Adjust: FnMut(Inflated, &Differentiable<A>) -> Differentiable<A>,
+    Adjust: FnMut(Inflated, &Differentiable<A>) -> Inflated,
 {
     let deflated = theta.clone().map(deflate);
     let delta = grad(f, &deflated);
@@ -135,30 +138,14 @@ where
     })
 }
 
-fn naked_gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
-    f: &mut F,
-    theta: [Differentiable<A>; PARAM_NUM],
-    hyper: &GradientDescentHyperImmut<A>,
-) -> [Differentiable<A>; PARAM_NUM]
-where
-    A: Clone + NumLike + Hash + Eq,
-    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
-{
-    general_gradient_descent_step(
-        f,
-        theta,
-        |x| x,
-        |theta, delta| naked_gradient_descent(&hyper, theta, delta),
-    )
-}
-
+/*
 /// Each input `theta` is expected to be enriched with its "velocity" as well:
 /// how much that parameter changed on the previous tick.
 fn velocity_gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
     f: &mut F,
     theta: [(Differentiable<A>, Scalar<A>); PARAM_NUM],
     hyper: &GradientDescentHyperImmut<A>,
-) -> [Differentiable<A>; PARAM_NUM]
+) -> [(Differentiable<A>, Scalar<A>); PARAM_NUM]
 where
     A: Clone + NumLike + Hash + Eq,
     F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
@@ -171,13 +158,27 @@ where
     )
 }
 
-fn gradient_descent<'a, T, R: Rng, Point, F, G, const IN_SIZE: usize, const PARAM_NUM: usize>(
+ */
+
+fn gradient_descent<
+    'a,
+    T,
+    R: Rng,
+    Point,
+    F,
+    G,
+    Inflated,
+    Adjust,
+    const IN_SIZE: usize,
+    const PARAM_NUM: usize,
+>(
     hyper: &mut GradientDescentHyper<T, R>,
     xs: &'a [Point],
     to_ranked_differentiable: G,
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut predictor: Predictor<F, Scalar<T>, Scalar<T>>,
+    mut adjust: Adjust,
+    mut predictor: Predictor<F, Inflated, Differentiable<T>>,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
@@ -187,11 +188,13 @@ where
         &[Differentiable<T>; PARAM_NUM],
     ) -> RankedDifferentiable<T, 1>,
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+    Inflated: Clone,
+    Adjust: FnMut(Inflated, &Differentiable<T>) -> Inflated,
 {
     let iterations = hyper.params.iterations;
     let out = iterate(
         |theta| {
-            naked_gradient_descent_step(
+            general_gradient_descent_step(
                 &mut |x| match hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
@@ -214,13 +217,14 @@ where
                     }
                 },
                 theta,
-                &hyper.params,
+                predictor.deflate,
+                &mut adjust,
             )
         },
-        zero_params.map(|x| x.map(&mut predictor.inflate)),
+        zero_params.map(predictor.inflate),
         iterations,
     );
-    out.map(|x| x.map(&mut predictor.deflate))
+    out.map(&mut predictor.deflate)
 }
 
 fn collect_vec<T>(input: RankedDifferentiable<NotNan<T>, 1>) -> Vec<T>
@@ -260,12 +264,15 @@ fn main() {
             Differentiable::of_scalar(Scalar::zero()),
         ];
 
+        let params = hyper.params.clone();
+
         gradient_descent(
             &mut hyper,
             &xs,
             RankedDifferentiable::of_slice_2::<_, 2>,
             &ys,
             zero_params,
+            |theta, delta| naked_gradient_descent(&params, theta, delta),
             plane_predictor(),
         )
     };
@@ -313,12 +320,14 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
+            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
+                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 line_unranked_predictor(),
             )
         };
@@ -351,12 +360,14 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
+            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
+                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 quadratic_unranked_predictor(),
             )
         };
@@ -396,12 +407,14 @@ mod tests {
                 RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
             ];
+            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
+                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 plane_predictor(),
             )
         };
@@ -437,12 +450,14 @@ mod tests {
                 RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
             ];
+            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
+                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 plane_predictor(),
             )
         };
