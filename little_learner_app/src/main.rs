@@ -33,7 +33,39 @@ struct GradientDescentHyper<A, R: Rng> {
     sampling: Option<(R, usize)>,
 }
 
-fn gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
+/// `adjust` takes the previous value and a delta, and returns a deflated new value.
+fn gradient_descent_step<
+    A,
+    F,
+    Inflated,
+    Deflate,
+    Adjust,
+    const RANK: usize,
+    const PARAM_NUM: usize,
+>(
+    f: &mut F,
+    theta: [Inflated; PARAM_NUM],
+    deflate: Deflate,
+    mut adjust: Adjust,
+) -> [Differentiable<A>; PARAM_NUM]
+where
+    A: Clone + NumLike + Hash + Eq,
+    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
+    Deflate: FnMut(Inflated) -> Differentiable<A>,
+    Inflated: Clone,
+    Adjust: FnMut(Inflated, &Differentiable<A>) -> Differentiable<A>,
+{
+    let deflated = theta.clone().map(deflate);
+    let delta = grad(f, &deflated);
+    let mut i = 0;
+    theta.map(|inflated| {
+        let delta = &delta[i];
+        i += 1;
+        adjust(inflated, delta)
+    })
+}
+
+fn naked_gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
     f: &mut F,
     theta: [Differentiable<A>; PARAM_NUM],
     learning_rate: A,
@@ -42,19 +74,43 @@ where
     A: Clone + NumLike + Hash + Eq,
     F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
 {
-    let delta = grad(f, &theta);
-    let mut i = 0;
-    theta.map(|theta| {
-        let delta = &delta[i];
-        i += 1;
-        // For speed, you might want to truncate_dual this.
-        let learning_rate = Scalar::make(learning_rate.clone());
-        Differentiable::map2(
-            &theta,
-            &delta.map(&mut |s| s * learning_rate.clone()),
-            &mut |theta, delta| (*theta).clone() - (*delta).clone(),
-        )
-    })
+    gradient_descent_step(
+        f,
+        theta,
+        |x| x,
+        |theta, delta| {
+            let learning_rate = Scalar::make(learning_rate.clone());
+            Differentiable::map2(&theta, delta, &mut |theta, delta| {
+                theta.clone() - delta.clone() * learning_rate.clone()
+            })
+        },
+    )
+}
+
+/// Each input `theta` is expected to be enriched with its "velocity" as well:
+/// how much that parameter changed on the previous tick.
+fn velocity_gradient_descent_step<A, F, const RANK: usize, const PARAM_NUM: usize>(
+    f: &mut F,
+    theta: [(Differentiable<A>, Scalar<A>); PARAM_NUM],
+    learning_rate: A,
+    mu: A,
+) -> [Differentiable<A>; PARAM_NUM]
+where
+    A: Clone + NumLike + Hash + Eq,
+    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
+{
+    gradient_descent_step(
+        f,
+        theta,
+        |(x, _)| x,
+        |(theta, velocity), delta| {
+            let learning_rate = Scalar::make(learning_rate.clone());
+            Differentiable::map2(&theta, delta, &mut |theta, delta| {
+                theta.clone() + Scalar::make(mu.clone()) * velocity.clone()
+                    - delta.clone() * learning_rate.clone()
+            })
+        },
+    )
 }
 
 fn gradient_descent<'a, T, R: Rng, Point, F, G, const IN_SIZE: usize, const PARAM_NUM: usize>(
@@ -75,9 +131,9 @@ where
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
 {
     let iterations = hyper.iterations;
-    iterate(
+    let out = iterate(
         |theta| {
-            let out = gradient_descent_step::<T, _, 1, PARAM_NUM>(
+            naked_gradient_descent_step(
                 &mut |x| match hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
@@ -99,14 +155,14 @@ where
                         )])
                     }
                 },
-                theta.map(|x| x.map(&mut predictor.inflate)),
+                theta,
                 hyper.learning_rate,
-            );
-            out.map(|x| x.map(&mut predictor.deflate))
+            )
         },
-        zero_params,
+        zero_params.map(|x| x.map(&mut predictor.inflate)),
         iterations,
-    )
+    );
+    out.map(|x| x.map(&mut predictor.deflate))
 }
 
 fn collect_vec<T>(input: RankedDifferentiable<NotNan<T>, 1>) -> Vec<T>
