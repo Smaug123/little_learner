@@ -1,3 +1,4 @@
+use crate::scalar::Scalar;
 use ordered_float::NotNan;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Neg};
@@ -54,11 +55,13 @@ pub trait NumLike:
     + Mul<Output = Self>
     + Div<Output = Self>
     + Sum
-    + Default
     + Clone
-    + Copy
     + Sized
+    + PartialEq
+    + Eq
 {
 }
 
 impl NumLike for NotNan<f64> {}
+
+impl<A> NumLike for Scalar<A> where A: NumLike {}

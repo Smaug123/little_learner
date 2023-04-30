@@ -478,6 +478,7 @@ mod tests {
     use ordered_float::NotNan;
 
     use crate::loss::{l2_loss_2, predict_line_2_unranked};
+    use crate::not_nan::to_not_nan_1;
 
     use super::*;
 
@@ -538,5 +539,54 @@ mod tests {
             .map(Differentiable::into_scalar)
             .map(|x| f64::from(*x.real_part()));
         assert_eq!(grad_vec, [-63.0, -21.0]);
+    }
+
+    #[test]
+    fn grad_example() {
+        let input_vec = [Differentiable::of_scalar(Scalar::make(
+            NotNan::new(27.0).expect("not nan"),
+        ))];
+
+        let grad: Vec<_> = grad(
+            |x| {
+                RankedDifferentiable::of_scalar(
+                    x[0].borrow_scalar().clone() * x[0].borrow_scalar().clone(),
+                )
+            },
+            &input_vec,
+        )
+        .into_iter()
+        .map(|x| x.into_scalar().real_part().into_inner())
+        .collect();
+        assert_eq!(grad, [54.0]);
+    }
+
+    #[test]
+    fn loss_gradient() {
+        let zero = Scalar::<NotNan<f64>>::zero();
+        let input_vec = [
+            RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+            RankedDifferentiable::of_scalar(zero).to_unranked(),
+        ];
+        let xs = to_not_nan_1([2.0, 1.0, 4.0, 3.0]);
+        let ys = to_not_nan_1([1.8, 1.2, 4.2, 3.3]);
+        let grad = grad(
+            |x| {
+                RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(l2_loss_2(
+                    predict_line_2_unranked,
+                    RankedDifferentiable::of_slice(&xs),
+                    RankedDifferentiable::of_slice(&ys),
+                    x,
+                ))])
+            },
+            &input_vec,
+        );
+
+        assert_eq!(
+            grad.into_iter()
+                .map(|x| *(x.into_scalar().real_part()))
+                .collect::<Vec<_>>(),
+            [-63.0, -21.0]
+        );
     }
 }
