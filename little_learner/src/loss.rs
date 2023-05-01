@@ -3,9 +3,10 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
+use crate::auto_diff::Differentiable;
 use crate::traits::NumLike;
 use crate::{
-    auto_diff::{Differentiable, RankedDifferentiable},
+    auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
     traits::{One, Zero},
 };
@@ -27,11 +28,27 @@ where
     RankedDifferentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
 }
 
+pub fn dot_unranked_tagged<A, Tag1, Tag2, Tag3, F>(
+    x: &DifferentiableTagged<A, Tag1>,
+    y: &DifferentiableTagged<A, Tag2>,
+    mut combine_tags: F,
+) -> DifferentiableTagged<A, Tag3>
+where
+    A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
+    F: FnMut(Tag1, Tag2) -> Tag3,
+    Tag1: Clone,
+    Tag2: Clone,
+{
+    DifferentiableTagged::map2_tagged(x, y, &mut |x, tag1, y, tag2| {
+        (x.clone() * y.clone(), combine_tags(tag1, tag2))
+    })
+}
+
 pub fn dot_unranked<A>(x: &Differentiable<A>, y: &Differentiable<A>) -> Differentiable<A>
 where
     A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
-    Differentiable::map2(x, y, &mut |x, y| x.clone() * y.clone())
+    dot_unranked_tagged(x, y, |(), ()| ())
 }
 
 fn squared_2<A, const RANK: usize>(
@@ -127,7 +144,7 @@ where
         let dotted = RankedDifferentiable::of_scalar(
             dot_unranked(
                 left_arg.to_unranked_borrow(),
-                &Differentiable::of_vec(theta.to_vec()),
+                &DifferentiableTagged::of_vec(theta.to_vec()),
             )
             .into_vector()
             .into_iter()
@@ -181,7 +198,7 @@ where
         );
         dot_unranked(
             x_powers.to_unranked_borrow(),
-            &Differentiable::of_vec(theta.to_vec()),
+            &DifferentiableTagged::of_vec(theta.to_vec()),
         )
         .attach_rank::<1>()
         .expect("wanted a tensor1")
@@ -220,10 +237,11 @@ where
     RankedDifferentiable::of_vector(dotted)
 }
 
-pub struct Predictor<F, Inflated, Deflated> {
+pub struct Predictor<F, Inflated, Deflated, Params> {
     pub predict: F,
     pub inflate: fn(Deflated) -> Inflated,
     pub deflate: fn(Inflated) -> Deflated,
+    pub update: fn(Inflated, &Deflated, Params) -> Inflated,
 }
 
 type ParameterPredictor<T, const INPUT_DIM: usize, const THETA: usize> =
@@ -232,39 +250,91 @@ type ParameterPredictor<T, const INPUT_DIM: usize, const THETA: usize> =
         &[Differentiable<T>; THETA],
     ) -> RankedDifferentiable<T, 1>;
 
-pub const fn plane_predictor<T>() -> Predictor<ParameterPredictor<T, 2, 2>, Scalar<T>, Scalar<T>>
+#[derive(Clone)]
+pub struct NakedHypers<A> {
+    pub learning_rate: A,
+}
+
+pub const fn naked_predictor<F, A>(
+    f: F,
+) -> Predictor<F, Differentiable<A>, Differentiable<A>, NakedHypers<A>>
+where
+    A: NumLike,
+{
+    Predictor {
+        predict: f,
+        inflate: |x| x,
+        deflate: |x| x,
+
+        update: |theta, delta, hyper| {
+            let learning_rate = Scalar::make(hyper.learning_rate);
+            Differentiable::map2(&theta, delta, &mut |theta, delta| {
+                theta.clone() - delta.clone() * learning_rate.clone()
+            })
+        },
+    }
+}
+
+#[derive(Clone)]
+pub struct VelocityHypers<A> {
+    pub learning_rate: A,
+    pub mu: A,
+}
+
+pub const fn velocity_predictor<F, A>(
+    f: F,
+) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, VelocityHypers<A>>
+where
+    A: NumLike,
+{
+    Predictor {
+        predict: f,
+        inflate: |x| x.map_tag(&mut |()| A::zero()),
+        deflate: |x| x.map_tag(&mut |_| ()),
+        update: |theta, delta, hyper| {
+            DifferentiableTagged::map2_tagged(&theta, delta, &mut |theta, velocity, delta, ()| {
+                let velocity = hyper.mu.clone() * velocity
+                    + -(delta.clone_real_part() * hyper.learning_rate.clone());
+                (theta.clone() + Scalar::make(velocity.clone()), velocity)
+            })
+        },
+    }
+}
+
+pub const fn plane_predictor<T>(
+) -> Predictor<ParameterPredictor<T, 2, 2>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
 where
     T: NumLike + Default,
 {
-    Predictor {
-        predict: predict_plane,
-        inflate: |x| x,
-        deflate: |x| x,
-    }
+    naked_predictor(predict_plane)
+}
+
+pub const fn velocity_plane_predictor<T>() -> Predictor<
+    ParameterPredictor<T, 2, 2>,
+    DifferentiableTagged<T, T>,
+    Differentiable<T>,
+    VelocityHypers<T>,
+>
+where
+    T: NumLike + Default,
+{
+    velocity_predictor(predict_plane)
 }
 
 pub const fn line_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 2>, Scalar<T>, Scalar<T>>
+) -> Predictor<ParameterPredictor<T, 1, 2>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
 where
     T: NumLike + Default + Copy,
 {
-    Predictor {
-        predict: predict_line_2_unranked,
-        inflate: |x| x,
-        deflate: |x| x,
-    }
+    naked_predictor(predict_line_2_unranked)
 }
 
 pub const fn quadratic_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 3>, Scalar<T>, Scalar<T>>
+) -> Predictor<ParameterPredictor<T, 1, 3>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
 where
     T: NumLike + Default,
 {
-    Predictor {
-        predict: predict_quadratic_unranked,
-        inflate: |x| x,
-        deflate: |x| x,
-    }
+    naked_predictor(predict_quadratic_unranked)
 }
 
 #[cfg(test)]
