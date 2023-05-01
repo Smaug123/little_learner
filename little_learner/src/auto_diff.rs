@@ -461,6 +461,16 @@ impl<A> RankedDifferentiable<A, 1> {
     {
         RankedDifferentiableTagged::of_slice_tagged(input, ())
     }
+
+    pub fn collect(self: RankedDifferentiable<A, 1>) -> Vec<A>
+    where
+        A: Copy,
+    {
+        self.to_vector()
+            .into_iter()
+            .map(|x| *x.to_scalar().real_part())
+            .collect::<Vec<_>>()
+    }
 }
 
 impl<A, Tag> RankedDifferentiableTagged<A, Tag, 2> {
