@@ -12,7 +12,9 @@ use little_learner::auto_diff::{
 };
 
 use crate::sample::sample2;
-use little_learner::loss::{l2_loss_2, velocity_plane_predictor, Predictor};
+use little_learner::loss::{
+    l2_loss_2, velocity_plane_predictor, NakedHypers, Predictor, VelocityHypers,
+};
 use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
@@ -39,6 +41,23 @@ struct GradientDescentHyperImmut<A> {
 struct GradientDescentHyper<A, R: Rng> {
     sampling: Option<(R, usize)>,
     params: GradientDescentHyperImmut<A>,
+}
+
+impl<A> Into<VelocityHypers<A>> for GradientDescentHyperImmut<A> {
+    fn into(self) -> VelocityHypers<A> {
+        VelocityHypers {
+            learning_rate: self.learning_rate,
+            mu: self.mu,
+        }
+    }
+}
+
+impl<A> Into<NakedHypers<A>> for GradientDescentHyperImmut<A> {
+    fn into(self) -> NakedHypers<A> {
+        NakedHypers {
+            learning_rate: self.learning_rate,
+        }
+    }
 }
 
 impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
@@ -70,6 +89,7 @@ where
     DifferentiableTagged::map2_tagged(&deflate(theta), delta, &mut adjust)
 }
 
+// TODO: insert this into the Predictor type as `update`
 fn naked_gradient_descent<A>(
     hyper: &GradientDescentHyperImmut<A>,
     theta: Differentiable<A>,
@@ -112,12 +132,14 @@ fn general_gradient_descent_step<
     Inflated,
     Deflate,
     Adjust,
+    Hyper,
     const RANK: usize,
     const PARAM_NUM: usize,
 >(
     f: &mut F,
     theta: [Inflated; PARAM_NUM],
     deflate: Deflate,
+    hyper: Hyper,
     mut adjust: Adjust,
 ) -> [Inflated; PARAM_NUM]
 where
@@ -125,7 +147,8 @@ where
     F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
     Deflate: FnMut(Inflated) -> Differentiable<A>,
     Inflated: Clone,
-    Adjust: FnMut(Inflated, &Differentiable<A>) -> Inflated,
+    Hyper: Clone,
+    Adjust: FnMut(Inflated, &Differentiable<A>, Hyper) -> Inflated,
 {
     let deflated = theta.clone().map(deflate);
     let delta = grad(f, &deflated);
@@ -133,7 +156,7 @@ where
     theta.map(|inflated| {
         let delta = &delta[i];
         i += 1;
-        adjust(inflated, delta)
+        adjust(inflated, delta, hyper.clone())
     })
 }
 
@@ -145,7 +168,7 @@ fn gradient_descent<
     F,
     G,
     Inflated,
-    Adjust,
+    Hyper,
     const IN_SIZE: usize,
     const PARAM_NUM: usize,
 >(
@@ -154,8 +177,7 @@ fn gradient_descent<
     to_ranked_differentiable: G,
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut adjust: Adjust,
-    mut predictor: Predictor<F, Inflated, Differentiable<T>>,
+    mut predictor: Predictor<F, Inflated, Differentiable<T>, Hyper>,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
@@ -166,7 +188,8 @@ where
     ) -> RankedDifferentiable<T, 1>,
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
     Inflated: Clone,
-    Adjust: FnMut(Inflated, &Differentiable<T>) -> Inflated,
+    Hyper: Clone,
+    GradientDescentHyperImmut<T>: Into<Hyper>,
 {
     let iterations = hyper.params.iterations;
     let out = iterate(
@@ -195,7 +218,8 @@ where
                 },
                 theta,
                 predictor.deflate,
-                &mut adjust,
+                hyper.params.clone().into(),
+                predictor.update,
             )
         },
         zero_params.map(predictor.inflate),
@@ -241,15 +265,12 @@ fn main() {
             Differentiable::of_scalar(Scalar::zero()),
         ];
 
-        let params = hyper.params.clone();
-
         gradient_descent(
             &mut hyper,
             &xs,
             RankedDifferentiableTagged::of_slice_2::<_, 2>,
             &ys,
             zero_params,
-            |theta, delta| velocity_gradient_descent(&params, theta, delta),
             velocity_plane_predictor(),
         )
     };
@@ -299,14 +320,12 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
-            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 line_unranked_predictor(),
             )
         };
@@ -339,14 +358,12 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
-            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 quadratic_unranked_predictor(),
             )
         };
@@ -386,14 +403,12 @@ mod tests {
                 RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
             ];
-            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
-                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 plane_predictor(),
             )
         };
@@ -429,14 +444,12 @@ mod tests {
                 RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
                 Differentiable::of_scalar(Scalar::zero()),
             ];
-            let params = hyper.params.clone();
             gradient_descent(
                 &mut hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
-                |theta, delta| naked_gradient_descent(&params, theta, delta),
                 plane_predictor(),
             )
         };
@@ -496,15 +509,12 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
 
-            let params = hyper.params.clone();
-
             gradient_descent(
                 &mut hyper,
                 &xs,
                 RankedDifferentiableTagged::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
-                |theta, delta| velocity_gradient_descent(&params, theta, delta),
                 velocity_plane_predictor(),
             )
         };
