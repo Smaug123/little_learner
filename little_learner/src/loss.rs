@@ -267,7 +267,7 @@ where
         deflate: |x| x,
 
         update: |theta, delta, hyper| {
-            let learning_rate = Scalar::make(hyper.learning_rate.clone());
+            let learning_rate = Scalar::make(hyper.learning_rate);
             Differentiable::map2(&theta, delta, &mut |theta, delta| {
                 theta.clone() - delta.clone() * learning_rate.clone()
             })

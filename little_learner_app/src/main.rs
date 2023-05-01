@@ -8,7 +8,7 @@ use core::hash::Hash;
 use rand::Rng;
 
 use little_learner::auto_diff::{
-    grad, Differentiable, DifferentiableTagged, RankedDifferentiable, RankedDifferentiableTagged,
+    grad, Differentiable, RankedDifferentiable, RankedDifferentiableTagged,
 };
 
 use crate::sample::sample2;
@@ -43,19 +43,19 @@ struct GradientDescentHyper<A, R: Rng> {
     params: GradientDescentHyperImmut<A>,
 }
 
-impl<A> Into<VelocityHypers<A>> for GradientDescentHyperImmut<A> {
-    fn into(self) -> VelocityHypers<A> {
+impl<A> From<GradientDescentHyperImmut<A>> for VelocityHypers<A> {
+    fn from(val: GradientDescentHyperImmut<A>) -> VelocityHypers<A> {
         VelocityHypers {
-            learning_rate: self.learning_rate,
-            mu: self.mu,
+            learning_rate: val.learning_rate,
+            mu: val.mu,
         }
     }
 }
 
-impl<A> Into<NakedHypers<A>> for GradientDescentHyperImmut<A> {
-    fn into(self) -> NakedHypers<A> {
+impl<A> From<GradientDescentHyperImmut<A>> for NakedHypers<A> {
+    fn from(val: GradientDescentHyperImmut<A>) -> NakedHypers<A> {
         NakedHypers {
-            learning_rate: self.learning_rate,
+            learning_rate: val.learning_rate,
         }
     }
 }
@@ -71,58 +71,6 @@ impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
             sampling: None,
         }
     }
-}
-
-fn general_gradient_descent_tagged<A, Tag1, Tag2, Tag3, Inflated, Deflate, Adjust>(
-    theta: Inflated,
-    delta: &DifferentiableTagged<A, Tag2>,
-    mut deflate: Deflate,
-    mut adjust: Adjust,
-) -> DifferentiableTagged<A, Tag3>
-where
-    A: NumLike,
-    Deflate: FnMut(Inflated) -> DifferentiableTagged<A, Tag1>,
-    Adjust: FnMut(&Scalar<A>, Tag1, &Scalar<A>, Tag2) -> (Scalar<A>, Tag3),
-    Tag1: Clone,
-    Tag2: Clone,
-{
-    DifferentiableTagged::map2_tagged(&deflate(theta), delta, &mut adjust)
-}
-
-// TODO: insert this into the Predictor type as `update`
-fn naked_gradient_descent<A>(
-    hyper: &GradientDescentHyperImmut<A>,
-    theta: Differentiable<A>,
-    delta: &Differentiable<A>,
-) -> Differentiable<A>
-where
-    A: NumLike,
-{
-    let learning_rate = Scalar::make(hyper.learning_rate.clone());
-    Differentiable::map2(&theta, delta, &mut |theta, delta| {
-        theta.clone() - delta.clone() * learning_rate.clone()
-    })
-}
-
-fn velocity_gradient_descent<A>(
-    hyper: &GradientDescentHyperImmut<A>,
-    theta: DifferentiableTagged<A, A>,
-    delta: &Differentiable<A>,
-) -> DifferentiableTagged<A, A>
-where
-    A: NumLike,
-{
-    let learning_rate = hyper.learning_rate.clone();
-    general_gradient_descent_tagged(
-        theta,
-        delta,
-        |theta| theta,
-        |theta, velocity, delta, ()| {
-            let velocity =
-                hyper.mu.clone() * velocity + -(delta.clone_real_part() * learning_rate.clone());
-            (theta.clone() + Scalar::make(velocity.clone()), velocity)
-        },
-    )
 }
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
