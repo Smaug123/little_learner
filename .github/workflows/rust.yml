@@ -21,7 +21,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "cargo test",
@@ -41,7 +41,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "cargo test (release)",
@@ -62,7 +62,7 @@ jobs:
     #        {
     #          "name": "Install Nix",
     #          "uses": "cachix/install-nix-action@v17",
-    #          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+    #          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
     #        },
     #        {
     #          "name": "Run Shellcheck",
@@ -83,7 +83,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Run Alejandra",
@@ -104,7 +104,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Run ShellCheck",
@@ -125,7 +125,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Run Clippy",
@@ -146,7 +146,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Build app",
@@ -167,7 +167,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Run app",
@@ -188,7 +188,7 @@ jobs:
         {
           "name": "Install Nix",
           "uses": "cachix/install-nix-action@v17",
-          "with": { "extra-nix-config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
+          "with": { "extra_nix_config": "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}" }
         },
         {
           "name": "Run link checker",
