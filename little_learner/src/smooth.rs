@@ -104,9 +104,9 @@ mod test_smooth {
             vec![13.4, 18.2, 41.4],
             vec![1.1, 0.3, 67.3],
         ]
-        .map(hydrate);
+        .map(|x| hydrate(&x));
 
-        let mut current = hydrate(vec![0.8, 3.1, 2.2]);
+        let mut current = hydrate(&vec![0.8, 3.1, 2.2]);
         let mut output = Vec::with_capacity(inputs.len());
         for input in inputs {
             current = smooth(decay.clone(), &current, &input);
