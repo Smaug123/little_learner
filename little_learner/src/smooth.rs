@@ -3,10 +3,12 @@ use crate::scalar::Scalar;
 use crate::traits::One;
 use std::ops::{Add, Mul, Neg};
 
+/// Combine `old_value` and `new_value`, weighting the combination towards `new_value` by a factor
+/// of `decay`.
 pub fn smooth_tagged<A, F, Tag1, Tag2, Tag3>(
     decay: Scalar<A>,
-    current_avg: &DifferentiableTagged<A, Tag1>,
-    grad: &DifferentiableTagged<A, Tag2>,
+    old_value: &DifferentiableTagged<A, Tag1>,
+    new_value: &DifferentiableTagged<A, Tag2>,
     mut tags: F,
 ) -> DifferentiableTagged<A, Tag3>
 where
@@ -15,23 +17,25 @@ where
     Tag1: Clone,
     Tag2: Clone,
 {
-    DifferentiableTagged::map2_tagged(current_avg, grad, &mut |avg, tag1, grad, tag2| {
+    DifferentiableTagged::map2_tagged(old_value, new_value, &mut |old, tag1, new, tag2| {
         (
-            (avg.clone() * decay.clone()) + (grad.clone() * (Scalar::<A>::one() + -decay.clone())),
+            (old.clone() * decay.clone()) + (new.clone() * (Scalar::<A>::one() + -decay.clone())),
             tags(tag1, tag2),
         )
     })
 }
 
+/// Combine `old_value` and `new_value`, weighting the combination towards `new_value` by a factor
+/// of `decay`.
 pub fn smooth<A>(
     decay: Scalar<A>,
-    current_avg: &Differentiable<A>,
-    grad: &Differentiable<A>,
+    old_value: &Differentiable<A>,
+    new_value: &Differentiable<A>,
 ) -> Differentiable<A>
 where
     A: One + Clone + Mul<Output = A> + Neg<Output = A> + Add<Output = A>,
 {
-    smooth_tagged(decay, current_avg, grad, |(), ()| ())
+    smooth_tagged(decay, old_value, new_value, |(), ()| ())
 }
 
 #[cfg(test)]
@@ -72,17 +76,17 @@ mod test_smooth {
             output,
             vec![
                 5.0299999999999985,
-                6.7969999999999979,
-                6.5472999999999981,
-                6.1625699999999979,
+                6.796_999_999_999_998,
+                6.547_299_999_999_998,
+                6.162_569_999_999_998,
                 5.7263129999999975,
-                5.3736816999999979,
-                4.8963135299999978
+                5.373_681_699_999_998,
+                4.896_313_529_999_998
             ]
-        )
+        );
     }
 
-    fn hydrate(v: Vec<f64>) -> Differentiable<NotNan<f64>> {
+    fn hydrate(v: &[f64]) -> Differentiable<NotNan<f64>> {
         Differentiable::of_vec(
             v.iter()
                 .cloned()
@@ -100,9 +104,9 @@ mod test_smooth {
             vec![13.4, 18.2, 41.4],
             vec![1.1, 0.3, 67.3],
         ]
-        .map(hydrate);
+        .map(|x| hydrate(&x));
 
-        let mut current = hydrate(vec![0.8, 3.1, 2.2]);
+        let mut current = hydrate(&vec![0.8, 3.1, 2.2]);
         let mut output = Vec::with_capacity(inputs.len());
         for input in inputs {
             current = smooth(decay.clone(), &current, &input);
@@ -112,10 +116,10 @@ mod test_smooth {
         assert_eq!(
             output,
             vec![
-                vec![0.82000000000000006, 2.9, 2.2800000000000002],
-                vec![2.0779999999999998, 4.4299999999999997, 6.1919999999999993],
+                vec![0.820_000_000_000_000_1, 2.9, 2.2800000000000002],
+                vec![2.078, 4.43, 6.191_999_999_999_999],
                 vec![1.9802, 4.0169999999999995, 12.302799999999998]
             ]
-        )
+        );
     }
 }

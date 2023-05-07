@@ -4,6 +4,7 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Neg};
 
 pub trait Exp {
+    #[must_use]
     fn exp(self) -> Self;
 }
 
@@ -14,6 +15,7 @@ impl Exp for NotNan<f64> {
 }
 
 pub trait Sqrt {
+    #[must_use]
     fn sqrt(self) -> Self;
 }
 
@@ -24,10 +26,12 @@ impl Sqrt for NotNan<f64> {
 }
 
 pub trait Zero {
+    #[must_use]
     fn zero() -> Self;
 }
 
 pub trait One {
+    #[must_use]
     fn one() -> Self;
 }
 

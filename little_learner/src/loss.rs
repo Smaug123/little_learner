@@ -4,8 +4,6 @@ use std::{
 };
 
 use crate::auto_diff::Differentiable;
-use crate::smooth::smooth;
-use crate::traits::{NumLike, Sqrt};
 use crate::{
     auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
@@ -210,7 +208,10 @@ where
     })
 }
 
-// The parameters are: a tensor1 of length 2 (to be dotted with the input), and a scalar (to translate).
+/// The parameters are: a tensor1 of length 2 (to be dotted with the input), and a scalar (to translate).
+///
+/// # Panics
+/// Panics if the input `theta` is not of rank 1 consisting of a tensor1 and a scalar.
 pub fn predict_plane<A>(
     xs: RankedDifferentiable<A, 2>,
     theta: &[Differentiable<A>; 2],
@@ -218,9 +219,12 @@ pub fn predict_plane<A>(
 where
     A: Mul<Output = A> + Add<Output = A> + Sum + Default + One + Zero + Clone,
 {
-    if theta[0].rank() != 1 {
-        panic!("theta0 must be of rank 1, got: {}", theta[0].rank())
-    }
+    assert_eq!(
+        theta[0].rank(),
+        1,
+        "theta0 must be of rank 1, got: {}",
+        theta[0].rank()
+    );
     let theta0 = RankedDifferentiable::of_vector(
         theta[0]
             .borrow_vector()
@@ -236,105 +240,6 @@ where
         .map(|x| RankedDifferentiable::of_scalar(x + theta1.clone()))
         .collect();
     RankedDifferentiable::of_vector(dotted)
-}
-
-pub struct Predictor<F, Inflated, Deflated, Params> {
-    pub predict: F,
-    pub inflate: fn(Deflated) -> Inflated,
-    pub deflate: fn(Inflated) -> Deflated,
-    pub update: fn(Inflated, &Deflated, Params) -> Inflated,
-}
-
-#[derive(Clone)]
-pub struct NakedHypers<A> {
-    pub learning_rate: A,
-}
-
-pub const fn naked_predictor<F, A>(
-    f: F,
-) -> Predictor<F, Differentiable<A>, Differentiable<A>, NakedHypers<A>>
-where
-    A: NumLike,
-{
-    Predictor {
-        predict: f,
-        inflate: |x| x,
-        deflate: |x| x,
-
-        update: |theta, delta, hyper| {
-            let learning_rate = Scalar::make(hyper.learning_rate);
-            Differentiable::map2(&theta, delta, &mut |theta, delta| {
-                theta.clone() - delta.clone() * learning_rate.clone()
-            })
-        },
-    }
-}
-
-#[derive(Clone)]
-pub struct RmsHyper<A> {
-    pub stabilizer: A,
-    pub beta: A,
-    pub learning_rate: A,
-}
-
-pub const fn rms_predictor<F, A>(
-    f: F,
-) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, RmsHyper<A>>
-where
-    A: NumLike,
-{
-    Predictor {
-        predict: f,
-        inflate: |x| x.map_tag(&mut |()| A::zero()),
-        deflate: |x| x.map_tag(&mut |_| ()),
-        update: |theta, delta, hyper| {
-            DifferentiableTagged::map2_tagged(
-                &theta,
-                delta,
-                &mut |theta, smoothed_grad, delta, ()| {
-                    let r = smooth(
-                        Scalar::make(hyper.beta.clone()),
-                        &Differentiable::of_scalar(Scalar::make(smoothed_grad)),
-                        &Differentiable::of_scalar(delta.clone() * delta.clone()),
-                    )
-                    .into_scalar();
-                    let learning_rate = Scalar::make(hyper.learning_rate.clone())
-                        / (r.sqrt() + Scalar::make(hyper.stabilizer.clone()));
-                    (
-                        theta.clone()
-                            + -(delta.clone() * Scalar::make(hyper.learning_rate.clone())),
-                        learning_rate.clone_real_part(),
-                    )
-                },
-            )
-        },
-    }
-}
-
-#[derive(Clone)]
-pub struct VelocityHypers<A> {
-    pub learning_rate: A,
-    pub mu: A,
-}
-
-pub const fn velocity_predictor<F, A>(
-    f: F,
-) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, VelocityHypers<A>>
-where
-    A: NumLike,
-{
-    Predictor {
-        predict: f,
-        inflate: |x| x.map_tag(&mut |()| A::zero()),
-        deflate: |x| x.map_tag(&mut |_| ()),
-        update: |theta, delta, hyper| {
-            DifferentiableTagged::map2_tagged(&theta, delta, &mut |theta, velocity, delta, ()| {
-                let velocity = hyper.mu.clone() * velocity
-                    + -(delta.clone_real_part() * hyper.learning_rate.clone());
-                (theta.clone() + Scalar::make(velocity.clone()), velocity)
-            })
-        },
-    }
 }
 
 #[cfg(test)]
