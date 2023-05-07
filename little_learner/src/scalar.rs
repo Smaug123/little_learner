@@ -1,4 +1,4 @@
-use crate::traits::{Exp, One, Zero};
+use crate::traits::{Exp, One, Sqrt, Zero};
 use core::hash::Hash;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -15,6 +15,7 @@ pub enum LinkData<A> {
     Exponent(Box<Scalar<A>>),
     Log(Box<Scalar<A>>),
     Div(Box<Scalar<A>>, Box<Scalar<A>>),
+    Sqrt(Box<Scalar<A>>),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -42,6 +43,7 @@ where
                 f.write_fmt(format_args!("exp({})", arg.as_ref()))
             }
             Link::Link(LinkData::Log(arg)) => f.write_fmt(format_args!("log({})", arg.as_ref())),
+            Link::Link(LinkData::Sqrt(arg)) => f.write_fmt(format_args!("sqrt({})", arg.as_ref())),
             Link::Link(LinkData::Div(left, right)) => {
                 f.write_fmt(format_args!("({} / {})", left.as_ref(), right.as_ref()))
             }
@@ -57,9 +59,11 @@ impl<A> Link<A> {
             + AddAssign
             + Clone
             + Exp
+            + Add<Output = A>
             + Mul<Output = A>
             + Div<Output = A>
             + Neg<Output = A>
+            + Sqrt
             + Zero
             + One,
     {
@@ -126,6 +130,15 @@ impl<A> Link<A> {
                     LinkData::Neg(arg) => {
                         // d/dx(-y) = - dy/dx
                         arg.as_ref().clone_link().invoke(&arg, -z, acc);
+                    }
+                    LinkData::Sqrt(arg) => {
+                        // d/dx(y^(1/2)) = 1/2 y^(-1/2) dy/dx
+                        let two = A::one() + A::one();
+                        arg.as_ref().clone_link().invoke(
+                            &arg,
+                            A::one() / (two * arg.as_ref().clone_real_part().sqrt()) * z,
+                            acc,
+                        );
                     }
                 }
             }
@@ -250,6 +263,18 @@ where
     }
 }
 
+impl<A> Sqrt for Scalar<A>
+where
+    A: Sqrt + Clone,
+{
+    fn sqrt(self) -> Self {
+        Self::Dual(
+            self.clone_real_part().sqrt(),
+            Link::Link(LinkData::Sqrt(Box::new(self))),
+        )
+    }
+}
+
 impl<A> Default for Scalar<A>
 where
     A: Default,
@@ -321,7 +346,9 @@ where
 
 #[cfg(test)]
 mod test_loss {
+    use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
     use crate::scalar::Scalar;
+    use crate::traits::Sqrt;
     use ordered_float::NotNan;
     use std::collections::HashMap;
 
@@ -352,5 +379,18 @@ mod test_loss {
                 assert_eq!(value, -3.0 / 25.0);
             }
         }
+    }
+
+    #[test]
+    fn sqrt_gradient() {
+        let nine = Differentiable::of_scalar(Scalar::make(NotNan::new(9.0).expect("not nan")));
+        let graded: [Differentiable<NotNan<f64>>; 1] = grad(
+            |x| RankedDifferentiable::of_scalar(x[0].clone().into_scalar().clone().sqrt()),
+            &[nine],
+        );
+        let graded = graded.map(|x| x.into_scalar().clone_real_part().into_inner())[0];
+
+        // Derivative of sqrt(x) with respect to x at 3 is 1/6
+        assert_eq!(graded, 1.0 / 6.0);
     }
 }

@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+mod hyper;
 mod sample;
 mod with_tensor;
 
@@ -11,10 +12,9 @@ use little_learner::auto_diff::{
     grad, Differentiable, RankedDifferentiable, RankedDifferentiableTagged,
 };
 
+use crate::hyper::{BaseGradientDescentHyper, VelocityGradientDescentHyper};
 use crate::sample::sample2;
-use little_learner::loss::{
-    l2_loss_2, velocity_plane_predictor, NakedHypers, Predictor, VelocityHypers,
-};
+use little_learner::loss::{l2_loss_2, velocity_plane_predictor, Predictor};
 use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
@@ -29,48 +29,6 @@ where
         v = f(v);
     }
     v
-}
-
-#[derive(Clone)]
-struct GradientDescentHyperImmut<A> {
-    learning_rate: A,
-    iterations: u32,
-    mu: A,
-}
-
-struct GradientDescentHyper<A, R: Rng> {
-    sampling: Option<(R, usize)>,
-    params: GradientDescentHyperImmut<A>,
-}
-
-impl<A> From<GradientDescentHyperImmut<A>> for VelocityHypers<A> {
-    fn from(val: GradientDescentHyperImmut<A>) -> VelocityHypers<A> {
-        VelocityHypers {
-            learning_rate: val.learning_rate,
-            mu: val.mu,
-        }
-    }
-}
-
-impl<A> From<GradientDescentHyperImmut<A>> for NakedHypers<A> {
-    fn from(val: GradientDescentHyperImmut<A>) -> NakedHypers<A> {
-        NakedHypers {
-            learning_rate: val.learning_rate,
-        }
-    }
-}
-
-impl<A> GradientDescentHyper<A, rand::rngs::StdRng> {
-    fn new(learning_rate: A, iterations: u32, mu: A) -> Self {
-        GradientDescentHyper {
-            params: GradientDescentHyperImmut {
-                learning_rate,
-                iterations,
-                mu,
-            },
-            sampling: None,
-        }
-    }
 }
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
@@ -115,17 +73,20 @@ fn gradient_descent<
     Point,
     F,
     G,
+    H,
     Inflated,
     Hyper,
+    ImmutableHyper,
     const IN_SIZE: usize,
     const PARAM_NUM: usize,
 >(
-    hyper: &mut GradientDescentHyper<T, R>,
+    hyper: Hyper,
     xs: &'a [Point],
     to_ranked_differentiable: G,
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut predictor: Predictor<F, Inflated, Differentiable<T>, Hyper>,
+    mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
+    to_immutable: H,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
@@ -136,14 +97,17 @@ where
     ) -> RankedDifferentiable<T, 1>,
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
     Inflated: Clone,
-    Hyper: Clone,
-    GradientDescentHyperImmut<T>: Into<Hyper>,
+    ImmutableHyper: Clone,
+    Hyper: Into<BaseGradientDescentHyper<T, R>>,
+    H: FnOnce(&Hyper) -> ImmutableHyper,
 {
-    let iterations = hyper.params.iterations;
+    let sub_hypers = to_immutable(&hyper);
+    let mut gradient_hyper: BaseGradientDescentHyper<T, R> = hyper.into();
+    let iterations = gradient_hyper.iterations;
     let out = iterate(
         |theta| {
             general_gradient_descent_step(
-                &mut |x| match hyper.sampling.as_mut() {
+                &mut |x| match gradient_hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
                             &predictor.predict,
@@ -166,7 +130,7 @@ where
                 },
                 theta,
                 predictor.deflate,
-                hyper.params.clone().into(),
+                sub_hypers.clone(),
                 predictor.update,
             )
         },
@@ -187,11 +151,8 @@ fn main() {
     ];
     let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 
-    let mut hyper = GradientDescentHyper::new(
-        NotNan::new(0.001).expect("not nan"),
-        1000,
-        NotNan::new(0.9).expect("not nan"),
-    );
+    let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+        .with_mu(NotNan::new(0.9).expect("not nan"));
 
     let iterated = {
         let xs = to_not_nan_2(plane_xs);
@@ -203,12 +164,13 @@ fn main() {
         ];
 
         gradient_descent(
-            &mut hyper,
+            hyper,
             &xs,
             RankedDifferentiableTagged::of_slice_2::<_, 2>,
             &ys,
             zero_params,
             velocity_plane_predictor(),
+            VelocityGradientDescentHyper::to_immutable,
         )
     };
 
@@ -227,9 +189,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hyper::RmsGradientDescentHyper;
     use little_learner::loss::{
-        line_unranked_predictor, plane_predictor, quadratic_unranked_predictor,
+        line_unranked_predictor, plane_predictor, predict_plane, quadratic_unranked_predictor,
+        rms_predictor,
     };
+    use rand::rngs::StdRng;
     use rand::SeedableRng;
 
     #[test]
@@ -245,11 +210,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let mut hyper = GradientDescentHyper::new(
-            NotNan::new(0.01).expect("not nan"),
-            1000,
-            NotNan::new(0.0).expect("not nan"),
-        );
+        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.01).expect("not nan"), 1000);
         let iterated = {
             let xs = to_not_nan_1(xs);
             let ys = to_not_nan_1(ys);
@@ -258,12 +219,13 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 line_unranked_predictor(),
+                BaseGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -281,11 +243,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let mut hyper = GradientDescentHyper::new(
-            NotNan::new(0.001).expect("not nan"),
-            1000,
-            NotNan::new(0.0).expect("not nan"),
-        );
+        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_1(xs);
@@ -296,12 +254,13 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 quadratic_unranked_predictor(),
+                BaseGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -327,11 +286,7 @@ mod tests {
 
     #[test]
     fn optimise_plane() {
-        let mut hyper = GradientDescentHyper::new(
-            NotNan::new(0.001).expect("not nan"),
-            1000,
-            NotNan::new(0.0).expect("not nan"),
-        );
+        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -341,12 +296,13 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 plane_predictor(),
+                BaseGradientDescentHyper::to_immutable,
             )
         };
 
@@ -364,15 +320,9 @@ mod tests {
 
     #[test]
     fn optimise_plane_with_sampling() {
-        let rng = rand::rngs::StdRng::seed_from_u64(314159);
-        let mut hyper = GradientDescentHyper {
-            params: GradientDescentHyperImmut {
-                learning_rate: NotNan::new(0.001).expect("not nan"),
-                iterations: 1000,
-                mu: NotNan::new(0.0).expect("not nan"),
-            },
-            sampling: Some((rng, 4)),
-        };
+        let rng = StdRng::seed_from_u64(314159);
+        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+            .with_rng(rng, 4);
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -382,12 +332,13 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 plane_predictor(),
+                BaseGradientDescentHyper::to_immutable,
             )
         };
 
@@ -431,11 +382,8 @@ mod tests {
 
     #[test]
     fn test_with_velocity() {
-        let mut hyper = GradientDescentHyper::new(
-            NotNan::new(0.001).expect("not nan"),
-            1000,
-            NotNan::new(0.9).expect("not nan"),
-        );
+        let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+            .with_mu(NotNan::new(0.9).expect("not nan"));
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -447,12 +395,13 @@ mod tests {
             ];
 
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiableTagged::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 velocity_plane_predictor(),
+                VelocityGradientDescentHyper::to_immutable,
             )
         };
 
@@ -466,5 +415,48 @@ mod tests {
             theta1.to_scalar().real_part().into_inner(),
             6.169579045974949
         );
+    }
+
+    #[test]
+    fn test_with_rms() {
+        let beta = NotNan::new(0.9).expect("not nan");
+        let stabilizer = NotNan::new(0.00000001).expect("not nan");
+        let hyper = RmsGradientDescentHyper::default(NotNan::new(0.001).expect("not nan"), 3000)
+            .with_stabilizer(stabilizer)
+            .with_beta(beta);
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()])
+                    .to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                rms_predictor(predict_plane),
+                RmsGradientDescentHyper::to_immutable,
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
+        let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
+
+        let fitted_theta0 = theta0
+            .collect()
+            .iter()
+            .map(|x| x.into_inner())
+            .collect::<Vec<_>>();
+        let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
+        assert_eq!(fitted_theta0, [3.9853500993426492, 1.9745945728216352]);
+        assert_eq!(fitted_theta1, 6.1642229831811681);
     }
 }

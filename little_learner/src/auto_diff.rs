@@ -1,7 +1,8 @@
 use crate::scalar::Scalar;
-use crate::traits::{Exp, One, Zero};
+use crate::traits::{Exp, One, Sqrt, Zero};
 use core::hash::Hash;
 use std::collections::HashMap;
+use std::ops::Add;
 use std::{
     fmt::{Display, Write},
     ops::{AddAssign, Div, Mul, Neg},
@@ -125,6 +126,23 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
         }
     }
 
+    fn map_with_tag<B, F>(&self, f: &mut F) -> DifferentiableContents<B, Tag>
+    where
+        F: FnMut(Scalar<A>, &Tag) -> Scalar<B>,
+        A: Clone,
+        Tag: Clone,
+    {
+        match self {
+            DifferentiableContents::Scalar(a, tag) => {
+                DifferentiableContents::Scalar(f(a.clone(), tag), (*tag).clone())
+            }
+            DifferentiableContents::Vector(slice, rank) => DifferentiableContents::Vector(
+                slice.iter().map(|x| x.map_with_tag(f)).collect(),
+                *rank,
+            ),
+        }
+    }
+
     fn map_tag<Tag2, F>(&self, f: &mut F) -> DifferentiableContents<A, Tag2>
     where
         F: FnMut(Tag) -> Tag2,
@@ -215,6 +233,17 @@ impl<A, Tag> DifferentiableTagged<A, Tag> {
     {
         DifferentiableTagged {
             contents: self.contents.map(f),
+        }
+    }
+
+    pub fn map_with_tag<B, F>(&self, f: &mut F) -> DifferentiableTagged<B, Tag>
+    where
+        A: Clone,
+        Tag: Clone,
+        F: FnMut(Scalar<A>, &Tag) -> Scalar<B>,
+    {
+        DifferentiableTagged {
+            contents: self.contents.map_with_tag(f),
         }
     }
 
@@ -359,11 +388,13 @@ where
         + Eq
         + Hash
         + AddAssign
+        + Add<Output = A>
         + Mul<Output = A>
         + Exp
         + Div<Output = A>
         + Zero
         + One
+        + Sqrt
         + Neg<Output = A>,
 {
     fn accumulate_gradients_vec(
@@ -614,12 +645,14 @@ where
         + Clone
         + Hash
         + AddAssign
+        + Add<Output = A>
         + Mul<Output = A>
         + Exp
         + Div<Output = A>
         + Zero
         + One
         + Neg<Output = A>
+        + Sqrt
         + Eq,
     Tag: Clone,
 {
