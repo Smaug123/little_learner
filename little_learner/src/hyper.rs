@@ -1,5 +1,5 @@
-use little_learner::loss::{NakedHypers, RmsHyper, VelocityHypers};
-use little_learner::traits::{NumLike, Zero};
+use crate::loss::{NakedHypers, RmsHyper, VelocityHypers};
+use crate::traits::{NumLike, Zero};
 use rand::{rngs::StdRng, Rng};
 
 pub struct BaseGradientDescentHyper<A, R: Rng> {
