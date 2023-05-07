@@ -24,8 +24,9 @@ fn main() {
     ];
     let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 
-    let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
-        .with_mu(NotNan::new(0.9).expect("not nan"));
+    let hyper =
+        VelocityGradientDescentHyper::zero_momentum(NotNan::new(0.001).expect("not nan"), 1000)
+            .with_mu(NotNan::new(0.9).expect("not nan"));
 
     let iterated = {
         let xs = to_not_nan_2(plane_xs);

@@ -84,12 +84,12 @@ where
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
     Inflated: Clone,
     ImmutableHyper: Clone,
-    Hyper: Into<BaseGradientDescentHyper<T, R>>,
+    Hyper: Into<BaseGradientDescentHyper<R>>,
     H: FnOnce(&Hyper) -> ImmutableHyper,
     R: Rng,
 {
     let sub_hypers = to_immutable(&hyper);
-    let mut gradient_hyper: BaseGradientDescentHyper<T, R> = hyper.into();
+    let mut gradient_hyper: BaseGradientDescentHyper<R> = hyper.into();
     let iterations = gradient_hyper.iterations;
     let out = iterate(
         |theta| {
@@ -131,7 +131,9 @@ where
 mod tests {
     use super::*;
     use crate::auto_diff::RankedDifferentiableTagged;
-    use crate::hyper::{RmsGradientDescentHyper, VelocityGradientDescentHyper};
+    use crate::hyper::{
+        NakedGradientDescentHyper, RmsGradientDescentHyper, VelocityGradientDescentHyper,
+    };
     use crate::loss::{
         naked_predictor, predict_line_2_unranked, predict_plane, predict_quadratic_unranked,
         rms_predictor, velocity_predictor,
@@ -156,7 +158,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.01).expect("not nan"), 1000);
+        let hyper = NakedGradientDescentHyper::new(NotNan::new(0.01).expect("not nan"), 1000);
         let iterated = {
             let xs = to_not_nan_1(xs);
             let ys = to_not_nan_1(ys);
@@ -171,7 +173,7 @@ mod tests {
                 &ys,
                 zero_params,
                 naked_predictor(predict_line_2_unranked),
-                BaseGradientDescentHyper::to_immutable,
+                NakedGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -189,7 +191,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
+        let hyper = NakedGradientDescentHyper::new(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_1(xs);
@@ -206,7 +208,7 @@ mod tests {
                 &ys,
                 zero_params,
                 naked_predictor(predict_quadratic_unranked),
-                BaseGradientDescentHyper::to_immutable,
+                NakedGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn optimise_plane() {
-        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
+        let hyper = NakedGradientDescentHyper::new(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -248,7 +250,7 @@ mod tests {
                 &ys,
                 zero_params,
                 naked_predictor(predict_plane),
-                BaseGradientDescentHyper::to_immutable,
+                NakedGradientDescentHyper::to_immutable,
             )
         };
 
@@ -267,7 +269,7 @@ mod tests {
     #[test]
     fn optimise_plane_with_sampling() {
         let rng = StdRng::seed_from_u64(314159);
-        let hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+        let hyper = NakedGradientDescentHyper::new(NotNan::new(0.001).expect("not nan"), 1000)
             .with_rng(rng, 4);
 
         let iterated = {
@@ -284,7 +286,7 @@ mod tests {
                 &ys,
                 zero_params,
                 naked_predictor(predict_plane),
-                BaseGradientDescentHyper::to_immutable,
+                NakedGradientDescentHyper::to_immutable,
             )
         };
 
@@ -328,8 +330,9 @@ mod tests {
 
     #[test]
     fn test_with_velocity() {
-        let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
-            .with_mu(NotNan::new(0.9).expect("not nan"));
+        let hyper =
+            VelocityGradientDescentHyper::zero_momentum(NotNan::new(0.001).expect("not nan"), 1000)
+                .with_mu(NotNan::new(0.9).expect("not nan"));
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
