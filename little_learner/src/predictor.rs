@@ -24,11 +24,9 @@ pub struct NakedHypers<A> {
     pub learning_rate: A,
 }
 
-pub const fn naked_predictor<F, A>(
-    f: F,
-) -> Predictor<F, Differentiable<A>, Differentiable<A>, NakedHypers<A>>
-    where
-        A: NumLike,
+pub const fn naked<F, A>(f: F) -> Predictor<F, Differentiable<A>, Differentiable<A>, NakedHypers<A>>
+where
+    A: NumLike,
 {
     Predictor {
         predict: f,
@@ -51,11 +49,11 @@ pub struct RmsHyper<A> {
     pub learning_rate: A,
 }
 
-pub const fn rms_predictor<F, A>(
+pub const fn rms<F, A>(
     f: F,
 ) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, RmsHyper<A>>
-    where
-        A: NumLike,
+where
+    A: NumLike,
 {
     Predictor {
         predict: f,
@@ -71,12 +69,13 @@ pub const fn rms_predictor<F, A>(
                         &Differentiable::of_scalar(Scalar::make(smoothed_grad)),
                         &Differentiable::of_scalar(delta.clone() * delta.clone()),
                     )
-                        .into_scalar();
+                    .into_scalar();
                     let learning_rate = Scalar::make(hyper.learning_rate.clone())
                         / (r.sqrt() + Scalar::make(hyper.stabilizer.clone()));
                     (
                         (theta.clone()
-                            + -(delta.clone() * Scalar::make(hyper.learning_rate.clone()))).truncate_dual(None),
+                            + -(delta.clone() * Scalar::make(hyper.learning_rate.clone())))
+                        .truncate_dual(None),
                         learning_rate.clone_real_part(),
                     )
                 },
@@ -91,11 +90,11 @@ pub struct VelocityHypers<A> {
     pub mu: A,
 }
 
-pub const fn velocity_predictor<F, A>(
+pub const fn velocity<F, A>(
     f: F,
 ) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, VelocityHypers<A>>
-    where
-        A: NumLike,
+where
+    A: NumLike,
 {
     Predictor {
         predict: f,
@@ -110,4 +109,3 @@ pub const fn velocity_predictor<F, A>(
         },
     }
 }
-

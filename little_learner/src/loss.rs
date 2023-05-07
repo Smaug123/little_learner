@@ -209,6 +209,9 @@ where
 }
 
 /// The parameters are: a tensor1 of length 2 (to be dotted with the input), and a scalar (to translate).
+///
+/// # Panics
+/// Panics if the input `theta` is not of rank 1 consisting of a tensor1 and a scalar.
 pub fn predict_plane<A>(
     xs: RankedDifferentiable<A, 2>,
     theta: &[Differentiable<A>; 2],
@@ -216,9 +219,12 @@ pub fn predict_plane<A>(
 where
     A: Mul<Output = A> + Add<Output = A> + Sum + Default + One + Zero + Clone,
 {
-    if theta[0].rank() != 1 {
-        panic!("theta0 must be of rank 1, got: {}", theta[0].rank())
-    }
+    assert_eq!(
+        theta[0].rank(),
+        1,
+        "theta0 must be of rank 1, got: {}",
+        theta[0].rank()
+    );
     let theta0 = RankedDifferentiable::of_vector(
         theta[0]
             .borrow_vector()

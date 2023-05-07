@@ -3,54 +3,58 @@ use crate::traits::{NumLike, Zero};
 use rand::rngs::StdRng;
 
 /// Hyperparameters which apply to any possible optimisation algorithm that uses gradient descent.
-pub struct BaseGradientDescentHyper<Rng> {
+pub struct BaseGradientDescent<Rng> {
     pub sampling: Option<(Rng, usize)>,
     pub iterations: u32,
 }
 
-impl BaseGradientDescentHyper<StdRng> {
-    pub fn new(iterations: u32) -> BaseGradientDescentHyper<StdRng> {
-        BaseGradientDescentHyper {
+impl BaseGradientDescent<StdRng> {
+    #[must_use]
+    pub fn new(iterations: u32) -> BaseGradientDescent<StdRng> {
+        BaseGradientDescent {
             sampling: None,
             iterations,
         }
     }
 }
 
-impl<Rng> BaseGradientDescentHyper<Rng> {
-    pub fn with_rng<Rng2>(self, rng: Rng2, size: usize) -> BaseGradientDescentHyper<Rng2> {
-        BaseGradientDescentHyper {
+impl<Rng> BaseGradientDescent<Rng> {
+    #[must_use]
+    pub fn with_rng<Rng2>(self, rng: Rng2, size: usize) -> BaseGradientDescent<Rng2> {
+        BaseGradientDescent {
             iterations: self.iterations,
             sampling: Some((rng, size)),
         }
     }
 
+    #[must_use]
     pub fn with_iterations(self, n: u32) -> Self {
-        BaseGradientDescentHyper {
+        BaseGradientDescent {
             sampling: self.sampling,
             iterations: n,
         }
     }
 }
 
-pub struct NakedGradientDescentHyper<A, Rng> {
-    base: BaseGradientDescentHyper<Rng>,
+pub struct NakedGradientDescent<A, Rng> {
+    base: BaseGradientDescent<Rng>,
     naked: NakedHypers<A>,
 }
 
-impl<A> NakedGradientDescentHyper<A, StdRng>
+impl<A> NakedGradientDescent<A, StdRng>
 where
     A: Zero,
 {
+    #[must_use]
     pub fn new(learning_rate: A, iterations: u32) -> Self {
-        NakedGradientDescentHyper {
-            base: BaseGradientDescentHyper::new(iterations),
+        NakedGradientDescent {
+            base: BaseGradientDescent::new(iterations),
             naked: NakedHypers { learning_rate },
         }
     }
 }
 
-impl<A, Rng> NakedGradientDescentHyper<A, Rng> {
+impl<A, Rng> NakedGradientDescent<A, Rng> {
     pub fn to_immutable(&self) -> NakedHypers<A>
     where
         A: Clone,
@@ -58,32 +62,34 @@ impl<A, Rng> NakedGradientDescentHyper<A, Rng> {
         self.naked.clone()
     }
 
-    pub fn with_rng<Rng2>(self, rng: Rng2, size: usize) -> NakedGradientDescentHyper<A, Rng2> {
-        NakedGradientDescentHyper {
+    #[must_use]
+    pub fn with_rng<Rng2>(self, rng: Rng2, size: usize) -> NakedGradientDescent<A, Rng2> {
+        NakedGradientDescent {
             base: self.base.with_rng(rng, size),
             naked: self.naked,
         }
     }
 }
 
-impl<A, Rng> From<NakedGradientDescentHyper<A, Rng>> for BaseGradientDescentHyper<Rng> {
-    fn from(val: NakedGradientDescentHyper<A, Rng>) -> BaseGradientDescentHyper<Rng> {
+impl<A, Rng> From<NakedGradientDescent<A, Rng>> for BaseGradientDescent<Rng> {
+    fn from(val: NakedGradientDescent<A, Rng>) -> BaseGradientDescent<Rng> {
         val.base
     }
 }
 
-pub struct VelocityGradientDescentHyper<A, Rng> {
-    base: BaseGradientDescentHyper<Rng>,
+pub struct VelocityGradientDescent<A, Rng> {
+    base: BaseGradientDescent<Rng>,
     velocity: VelocityHypers<A>,
 }
 
-impl<A> VelocityGradientDescentHyper<A, StdRng>
+impl<A> VelocityGradientDescent<A, StdRng>
 where
     A: Zero,
 {
+    #[must_use]
     pub fn zero_momentum(learning_rate: A, iterations: u32) -> Self {
-        VelocityGradientDescentHyper {
-            base: BaseGradientDescentHyper::new(iterations),
+        VelocityGradientDescent {
+            base: BaseGradientDescent::new(iterations),
             velocity: VelocityHypers {
                 learning_rate,
                 mu: A::zero(),
@@ -92,9 +98,10 @@ where
     }
 }
 
-impl<A, Rng> VelocityGradientDescentHyper<A, Rng> {
+impl<A, Rng> VelocityGradientDescent<A, Rng> {
+    #[must_use]
     pub fn with_mu(self, mu: A) -> Self {
-        VelocityGradientDescentHyper {
+        VelocityGradientDescent {
             base: self.base,
             velocity: VelocityHypers {
                 learning_rate: self.velocity.learning_rate,
@@ -111,18 +118,18 @@ impl<A, Rng> VelocityGradientDescentHyper<A, Rng> {
     }
 }
 
-impl<A, Rng> From<VelocityGradientDescentHyper<A, Rng>> for BaseGradientDescentHyper<Rng> {
-    fn from(val: VelocityGradientDescentHyper<A, Rng>) -> BaseGradientDescentHyper<Rng> {
+impl<A, Rng> From<VelocityGradientDescent<A, Rng>> for BaseGradientDescent<Rng> {
+    fn from(val: VelocityGradientDescent<A, Rng>) -> BaseGradientDescent<Rng> {
         val.base
     }
 }
 
-pub struct RmsGradientDescentHyper<A, Rng> {
-    base: BaseGradientDescentHyper<Rng>,
+pub struct RmsGradientDescent<A, Rng> {
+    base: BaseGradientDescent<Rng>,
     rms: RmsHyper<A>,
 }
 
-impl<A> RmsGradientDescentHyper<A, StdRng> {
+impl<A> RmsGradientDescent<A, StdRng> {
     pub fn default(learning_rate: A, iterations: u32) -> Self
     where
         A: NumLike,
@@ -133,8 +140,8 @@ impl<A> RmsGradientDescentHyper<A, StdRng> {
         let one_hundredth = one_tenth.clone() * one_tenth;
         let one_ten_k = one_hundredth.clone() * one_hundredth;
 
-        RmsGradientDescentHyper {
-            base: BaseGradientDescentHyper::new(iterations),
+        RmsGradientDescent {
+            base: BaseGradientDescent::new(iterations),
             rms: RmsHyper {
                 stabilizer: one_ten_k.clone() * one_ten_k,
                 beta: A::one() + -(A::one() / ten),
@@ -144,9 +151,10 @@ impl<A> RmsGradientDescentHyper<A, StdRng> {
     }
 }
 
-impl<A, Rng> RmsGradientDescentHyper<A, Rng> {
+impl<A, Rng> RmsGradientDescent<A, Rng> {
+    #[must_use]
     pub fn with_stabilizer(self, stabilizer: A) -> Self {
-        RmsGradientDescentHyper {
+        RmsGradientDescent {
             base: self.base,
             rms: RmsHyper {
                 stabilizer,
@@ -156,8 +164,9 @@ impl<A, Rng> RmsGradientDescentHyper<A, Rng> {
         }
     }
 
+    #[must_use]
     pub fn with_beta(self, beta: A) -> Self {
-        RmsGradientDescentHyper {
+        RmsGradientDescent {
             base: self.base,
             rms: RmsHyper {
                 stabilizer: self.rms.stabilizer,
@@ -175,8 +184,8 @@ impl<A, Rng> RmsGradientDescentHyper<A, Rng> {
     }
 }
 
-impl<A, Rng> From<RmsGradientDescentHyper<A, Rng>> for BaseGradientDescentHyper<Rng> {
-    fn from(val: RmsGradientDescentHyper<A, Rng>) -> BaseGradientDescentHyper<Rng> {
+impl<A, Rng> From<RmsGradientDescent<A, Rng>> for BaseGradientDescent<Rng> {
+    fn from(val: RmsGradientDescent<A, Rng>) -> BaseGradientDescent<Rng> {
         val.base
     }
 }

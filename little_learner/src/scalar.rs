@@ -117,7 +117,7 @@ impl<A> Link<A> {
                             -left.clone_real_part() * z
                                 / (right.clone_real_part() * right.clone_real_part()),
                             acc,
-                        )
+                        );
                     }
                     LinkData::Log(arg) => {
                         // d/dx(log y) = 1/y dy/dx
@@ -181,7 +181,7 @@ where
     A: Add<Output = A> + Clone,
 {
     fn add_assign(&mut self, rhs: Self) {
-        *self = self.clone() + rhs
+        *self = self.clone() + rhs;
     }
 }
 
@@ -287,8 +287,7 @@ where
 impl<A> Scalar<A> {
     pub fn real_part(&self) -> &A {
         match self {
-            Scalar::Number(a, _) => a,
-            Scalar::Dual(a, _) => a,
+            Scalar::Number(a, _) | Scalar::Dual(a, _) => a,
         }
     }
 
@@ -297,8 +296,7 @@ impl<A> Scalar<A> {
         A: Clone,
     {
         match self {
-            Scalar::Number(a, _) => (*a).clone(),
-            Scalar::Dual(a, _) => (*a).clone(),
+            Scalar::Number(a, _) | Scalar::Dual(a, _) => (*a).clone(),
         }
     }
 
@@ -319,6 +317,7 @@ impl<A> Scalar<A> {
         }
     }
 
+    #[must_use]
     pub fn truncate_dual(self, index: Option<usize>) -> Scalar<A>
     where
         A: Clone,
@@ -326,6 +325,7 @@ impl<A> Scalar<A> {
         Scalar::Dual(self.clone_real_part(), Link::EndOfLink(index))
     }
 
+    #[must_use]
     pub fn make(x: A) -> Scalar<A> {
         Scalar::Number(x, None)
     }
@@ -337,9 +337,9 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Scalar::Number(n, Some(index)) => f.write_fmt(format_args!("{}_{}", n, index)),
-            Scalar::Number(n, None) => f.write_fmt(format_args!("{}", n)),
-            Scalar::Dual(n, link) => f.write_fmt(format_args!("<{}, link: {}>", n, link)),
+            Scalar::Number(n, Some(index)) => f.write_fmt(format_args!("{n}_{index}")),
+            Scalar::Number(n, None) => f.write_fmt(format_args!("{n}")),
+            Scalar::Dual(n, link) => f.write_fmt(format_args!("<{n}, link: {link}>")),
         }
     }
 }

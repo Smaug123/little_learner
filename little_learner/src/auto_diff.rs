@@ -84,11 +84,11 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DifferentiableContents::Scalar(s, _) => f.write_fmt(format_args!("{}", s)),
+            DifferentiableContents::Scalar(s, _) => f.write_fmt(format_args!("{s}")),
             DifferentiableContents::Vector(v, _rank) => {
                 f.write_char('[')?;
                 for v in v.iter() {
-                    f.write_fmt(format_args!("{}", v))?;
+                    f.write_fmt(format_args!("{v}"))?;
                     f.write_char(',')?;
                 }
                 f.write_char(']')
@@ -159,6 +159,12 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
         }
     }
 
+    /// This function does *not* check that its inputs are of exactly the same shape, though it
+    /// does check ranks. If you have two vectors of different lengths, you will silently get the
+    /// shorter one.
+    ///
+    /// # Panics
+    /// Panics if the two inputs have different shapes (e.g. if they have different ranks).
     fn map2<B, C, Tag2, Tag3, F>(
         &self,
         other: &DifferentiableContents<B, Tag2>,
@@ -180,9 +186,7 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
                 DifferentiableContents::Vector(slice_a, rank_a),
                 DifferentiableContents::Vector(slice_b, rank_b),
             ) => {
-                if rank_a != rank_b {
-                    panic!("Unexpectedly different ranks in map2");
-                }
+                assert_eq!(rank_a, rank_b, "Unexpectedly different ranks in map2");
                 DifferentiableContents::Vector(
                     slice_a
                         .iter()
@@ -367,10 +371,11 @@ impl<A, Tag> DifferentiableTagged<A, Tag> {
         }
     }
 
+    /// # Panics
+    /// Panics if the input is empty (otherwise we can't determine a rank).
+    #[must_use]
     pub fn of_vec(input: Vec<DifferentiableTagged<A, Tag>>) -> DifferentiableTagged<A, Tag> {
-        if input.is_empty() {
-            panic!("Can't make an empty tensor");
-        }
+        assert!(!input.is_empty(), "Can't make an empty tensor");
         let rank = input[0].rank();
         DifferentiableTagged {
             contents: DifferentiableContents::Vector(input, 1 + rank),
@@ -413,7 +418,7 @@ where
                 k.invoke(y, A::one(), acc);
             }
             DifferentiableContents::Vector(y, _rank) => {
-                DifferentiableContents::accumulate_gradients_vec(y, acc)
+                DifferentiableContents::accumulate_gradients_vec(y, acc);
             }
         }
     }
@@ -543,6 +548,7 @@ impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
         &self.contents
     }
 
+    #[must_use]
     pub fn of_vector(
         s: Vec<RankedDifferentiableTagged<A, Tag, RANK>>,
     ) -> RankedDifferentiableTagged<A, Tag, { RANK + 1 }> {
@@ -683,18 +689,16 @@ mod tests {
 
     #[test]
     fn test_map() {
-        let v = DifferentiableTagged::of_vec(
-            vec![
-                Differentiable::of_scalar(Scalar::Number(
-                    NotNan::new(3.0).expect("3 is not NaN"),
-                    Some(0usize),
-                )),
-                DifferentiableTagged::of_scalar(Scalar::Number(
-                    NotNan::new(4.0).expect("4 is not NaN"),
-                    Some(1usize),
-                )),
-            ],
-        );
+        let v = DifferentiableTagged::of_vec(vec![
+            Differentiable::of_scalar(Scalar::Number(
+                NotNan::new(3.0).expect("3 is not NaN"),
+                Some(0usize),
+            )),
+            DifferentiableTagged::of_scalar(Scalar::Number(
+                NotNan::new(4.0).expect("4 is not NaN"),
+                Some(1usize),
+            )),
+        ]);
         let mapped = v.map(&mut |x: Scalar<NotNan<f64>>| match x {
             Scalar::Number(i, n) => Scalar::Number(i + NotNan::new(1.0).expect("1 is not NaN"), n),
             Scalar::Dual(_, _) => panic!("Not hit"),

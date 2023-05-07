@@ -83,10 +83,10 @@ mod test_smooth {
                 5.373_681_699_999_998,
                 4.896_313_529_999_998
             ]
-        )
+        );
     }
 
-    fn hydrate(v: Vec<f64>) -> Differentiable<NotNan<f64>> {
+    fn hydrate(v: &[f64]) -> Differentiable<NotNan<f64>> {
         Differentiable::of_vec(
             v.iter()
                 .cloned()
@@ -120,6 +120,6 @@ mod test_smooth {
                 vec![2.078, 4.43, 6.191_999_999_999_999],
                 vec![1.9802, 4.0169999999999995, 12.302799999999998]
             ]
-        )
+        );
     }
 }
