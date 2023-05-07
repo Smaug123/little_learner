@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::auto_diff::Differentiable;
-use crate::traits::NumLike;
+use crate::smooth::smooth;
+use crate::traits::{NumLike, Sqrt};
 use crate::{
     auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
@@ -271,6 +272,47 @@ where
             Differentiable::map2(&theta, delta, &mut |theta, delta| {
                 theta.clone() - delta.clone() * learning_rate.clone()
             })
+        },
+    }
+}
+
+#[derive(Clone)]
+pub struct RmsHyper<A> {
+    pub stabilizer: A,
+    pub beta: A,
+    pub learning_rate: A,
+}
+
+pub const fn rms_predictor<F, A>(
+    f: F,
+) -> Predictor<F, DifferentiableTagged<A, A>, Differentiable<A>, RmsHyper<A>>
+where
+    A: NumLike,
+{
+    Predictor {
+        predict: f,
+        inflate: |x| x.map_tag(&mut |()| A::zero()),
+        deflate: |x| x.map_tag(&mut |_| ()),
+        update: |theta, delta, hyper| {
+            DifferentiableTagged::map2_tagged(
+                &theta,
+                delta,
+                &mut |theta, smoothed_grad, delta, ()| {
+                    let r = smooth(
+                        Scalar::make(hyper.beta.clone()),
+                        &Differentiable::of_scalar(Scalar::make(smoothed_grad)),
+                        &Differentiable::of_scalar(delta.clone() * delta.clone()),
+                    )
+                    .into_scalar();
+                    let learning_rate = Scalar::make(hyper.learning_rate.clone())
+                        / (r.sqrt() + Scalar::make(hyper.stabilizer.clone()));
+                    (
+                        theta.clone()
+                            + -(delta.clone() * Scalar::make(hyper.learning_rate.clone())),
+                        learning_rate.clone_real_part(),
+                    )
+                },
+            )
         },
     }
 }

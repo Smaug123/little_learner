@@ -13,6 +13,16 @@ impl Exp for NotNan<f64> {
     }
 }
 
+pub trait Sqrt {
+    fn sqrt(self) -> Self;
+}
+
+impl Sqrt for NotNan<f64> {
+    fn sqrt(self) -> Self {
+        NotNan::new(f64::sqrt(self.into_inner())).expect("expected a non-NaN")
+    }
+}
+
 pub trait Zero {
     fn zero() -> Self;
 }
@@ -55,6 +65,7 @@ pub trait NumLike:
     + Mul<Output = Self>
     + Div<Output = Self>
     + Sum
+    + Sqrt
     + Clone
     + Sized
     + PartialEq
