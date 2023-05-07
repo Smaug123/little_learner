@@ -62,8 +62,8 @@ fn main() {
         .map(|x| x.into_inner())
         .collect::<Vec<_>>();
     let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
-    assert_eq!(fitted_theta0, [3.9853500993426492, 1.9745945728216352]);
-    assert_eq!(fitted_theta1, 6.1642229831811681);
+    assert_eq!(fitted_theta0, [3.985_350_099_342_649, 1.9745945728216352]);
+    assert_eq!(fitted_theta1, 6.164_222_983_181_168);
 }
 
 #[cfg(test)]

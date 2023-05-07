@@ -693,8 +693,7 @@ mod tests {
                     NotNan::new(4.0).expect("4 is not NaN"),
                     Some(1usize),
                 )),
-            ]
-            .into(),
+            ],
         );
         let mapped = v.map(&mut |x: Scalar<NotNan<f64>>| match x {
             Scalar::Number(i, n) => Scalar::Number(i + NotNan::new(1.0).expect("1 is not NaN"), n),
@@ -704,7 +703,7 @@ mod tests {
         let v = mapped
             .into_vector()
             .iter()
-            .map(|d| extract_scalar(d).clone())
+            .map(|d| *extract_scalar(d))
             .collect::<Vec<_>>();
 
         assert_eq!(v, [4.0, 5.0]);

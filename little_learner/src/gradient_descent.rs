@@ -326,8 +326,8 @@ mod tests {
         Show[points, withBatching]
          */
 
-        assert_eq!(theta0, [3.8581694055684781, 2.2166222673968554]);
-        assert_eq!(theta1, 5.2839863438547159);
+        assert_eq!(theta0, [3.858_169_405_568_478, 2.2166222673968554]);
+        assert_eq!(theta1, 5.283_986_343_854_716);
     }
 
     #[test]
@@ -407,7 +407,7 @@ mod tests {
             .map(|x| x.into_inner())
             .collect::<Vec<_>>();
         let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
-        assert_eq!(fitted_theta0, [3.9853500993426492, 1.9745945728216352]);
-        assert_eq!(fitted_theta1, 6.1642229831811681);
+        assert_eq!(fitted_theta0, [3.985_350_099_342_649, 1.9745945728216352]);
+        assert_eq!(fitted_theta1, 6.164_222_983_181_168);
     }
 }

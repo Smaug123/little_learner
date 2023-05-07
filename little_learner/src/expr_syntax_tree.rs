@@ -139,7 +139,7 @@ mod tests {
         }
 
         {
-            let add_four_then_mul_five = Expr::apply(1, mul_five.clone(), add_four.clone());
+            let add_four_then_mul_five = Expr::apply(1, mul_five, add_four);
             let add_then_mul_diff = Expr::differentiate(&1, &0, 0, &add_four_then_mul_five);
             for i in 3..10 {
                 // ((x + 4) * 5) differentiates to 5
