@@ -1,4 +1,4 @@
-use crate::loss::{NakedHypers, RmsHyper, VelocityHypers};
+use crate::predictor::{NakedHypers, RmsHyper, VelocityHypers};
 use crate::traits::{NumLike, Zero};
 use rand::rngs::StdRng;
 

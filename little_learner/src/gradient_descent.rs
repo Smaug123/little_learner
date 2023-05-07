@@ -1,6 +1,7 @@
 use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
 use crate::hyper::BaseGradientDescentHyper;
-use crate::loss::{l2_loss_2, Predictor};
+use crate::loss::{l2_loss_2};
+use crate::predictor::{Predictor};
 use crate::sample::sample2;
 use crate::traits::NumLike;
 use rand::Rng;
@@ -135,8 +136,7 @@ mod tests {
         NakedGradientDescentHyper, RmsGradientDescentHyper, VelocityGradientDescentHyper,
     };
     use crate::loss::{
-        naked_predictor, predict_line_2_unranked, predict_plane, predict_quadratic_unranked,
-        rms_predictor, velocity_predictor,
+        predict_line_2_unranked, predict_plane, predict_quadratic_unranked,
     };
     use crate::not_nan::{to_not_nan_1, to_not_nan_2};
     use crate::scalar::Scalar;
@@ -144,6 +144,8 @@ mod tests {
     use ordered_float::NotNan;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use crate::predictor::{
+    naked_predictor, rms_predictor, velocity_predictor};
 
     #[test]
     fn test_iterate() {

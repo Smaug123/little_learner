@@ -14,3 +14,4 @@ pub mod scalar;
 pub mod smooth;
 pub mod tensor;
 pub mod traits;
+pub mod predictor;
