@@ -1,6 +1,6 @@
-use rand::{Rng, rngs::StdRng};
-use little_learner::traits::{NumLike, Zero};
 use little_learner::loss::{NakedHypers, RmsHyper, VelocityHypers};
+use little_learner::traits::{NumLike, Zero};
+use rand::{rngs::StdRng, Rng};
 
 pub struct BaseGradientDescentHyper<A, R: Rng> {
     pub sampling: Option<(R, usize)>,
@@ -9,15 +9,13 @@ pub struct BaseGradientDescentHyper<A, R: Rng> {
 }
 
 impl<A> BaseGradientDescentHyper<A, StdRng>
-    where
-        A: NumLike + NumLike,
+where
+    A: NumLike + NumLike,
 {
     #[allow(dead_code)]
     pub fn naked(learning_rate: A, iterations: u32) -> Self {
         BaseGradientDescentHyper {
-            params: NakedHypers {
-                learning_rate,
-            },
+            params: NakedHypers { learning_rate },
             iterations,
             sampling: None,
         }
@@ -37,7 +35,7 @@ impl<A> BaseGradientDescentHyper<A, StdRng>
         BaseGradientDescentHyper {
             sampling: self.sampling,
             iterations: n,
-            params: self.params
+            params: self.params,
         }
     }
 
@@ -55,14 +53,17 @@ pub struct VelocityGradientDescentHyper<A, R: Rng> {
     mu: A,
 }
 
-impl<A> VelocityGradientDescentHyper<A, StdRng> where A: Zero {
+impl<A> VelocityGradientDescentHyper<A, StdRng>
+where
+    A: Zero,
+{
     #[allow(dead_code)]
     pub fn naked(learning_rate: A, iterations: u32) -> Self {
         VelocityGradientDescentHyper {
             sampling: None,
             learning_rate,
             iterations,
-            mu: A::zero()
+            mu: A::zero(),
         }
     }
 }
@@ -74,15 +75,18 @@ impl<A, R: Rng> VelocityGradientDescentHyper<A, R> {
             sampling: self.sampling,
             mu,
             learning_rate: self.learning_rate,
-            iterations: self.iterations
+            iterations: self.iterations,
         }
     }
 
     #[allow(dead_code)]
-    pub fn to_immutable(&self) -> VelocityHypers<A> where A: Clone {
+    pub fn to_immutable(&self) -> VelocityHypers<A>
+    where
+        A: Clone,
+    {
         VelocityHypers {
             mu: self.mu.clone(),
-            learning_rate: self.learning_rate.clone()
+            learning_rate: self.learning_rate.clone(),
         }
     }
 }
@@ -93,8 +97,8 @@ impl<A, R: Rng> From<VelocityGradientDescentHyper<A, R>> for BaseGradientDescent
             sampling: val.sampling,
             iterations: val.iterations,
             params: NakedHypers {
-                learning_rate: val.learning_rate
-            }
+                learning_rate: val.learning_rate,
+            },
         }
     }
 }
@@ -108,7 +112,10 @@ pub struct RmsGradientDescentHyper<A, R: Rng> {
 
 impl<A> RmsGradientDescentHyper<A, StdRng> {
     #[allow(dead_code)]
-    pub fn default(learning_rate: A, iterations: u32) -> Self where A: NumLike {
+    pub fn default(learning_rate: A, iterations: u32) -> Self
+    where
+        A: NumLike,
+    {
         let two = A::one() + A::one();
         let ten = two.clone() * two.clone() * two.clone() + two;
         let one_tenth = A::one() / ten.clone();
@@ -121,8 +128,8 @@ impl<A> RmsGradientDescentHyper<A, StdRng> {
             rms: RmsHyper {
                 stabilizer: one_ten_k.clone() * one_ten_k,
                 beta: A::one() + -(A::one() / ten),
-                learning_rate
-            }
+                learning_rate,
+            },
         }
     }
 }
@@ -137,7 +144,7 @@ impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
                 beta: self.rms.beta,
                 learning_rate: self.rms.learning_rate,
             },
-            iterations: self.iterations
+            iterations: self.iterations,
         }
     }
 
@@ -150,12 +157,15 @@ impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
                 beta,
                 learning_rate: self.rms.learning_rate,
             },
-            iterations: self.iterations
+            iterations: self.iterations,
         }
     }
 
     #[allow(dead_code)]
-    pub fn to_immutable(&self) -> RmsHyper<A> where A: Clone {
+    pub fn to_immutable(&self) -> RmsHyper<A>
+    where
+        A: Clone,
+    {
         self.rms.clone()
     }
 }
@@ -166,9 +176,8 @@ impl<A, R: Rng> From<RmsGradientDescentHyper<A, R>> for BaseGradientDescentHyper
             sampling: val.sampling,
             iterations: val.iterations,
             params: NakedHypers {
-                learning_rate: val.rms.learning_rate
-            }
+                learning_rate: val.rms.learning_rate,
+            },
         }
     }
 }
-

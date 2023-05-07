@@ -1,12 +1,12 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+mod hyper;
 mod sample;
 mod with_tensor;
-mod hyper;
 
 use core::hash::Hash;
-use rand::{Rng};
+use rand::Rng;
 
 use little_learner::auto_diff::{
     grad, Differentiable, RankedDifferentiable, RankedDifferentiableTagged,
@@ -14,9 +14,7 @@ use little_learner::auto_diff::{
 
 use crate::hyper::{BaseGradientDescentHyper, VelocityGradientDescentHyper};
 use crate::sample::sample2;
-use little_learner::loss::{
-    l2_loss_2, velocity_plane_predictor, Predictor,
-};
+use little_learner::loss::{l2_loss_2, velocity_plane_predictor, Predictor};
 use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
@@ -88,7 +86,7 @@ fn gradient_descent<
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
     mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
-    to_immutable: H
+    to_immutable: H,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
@@ -101,7 +99,7 @@ where
     Inflated: Clone,
     ImmutableHyper: Clone,
     Hyper: Into<BaseGradientDescentHyper<T, R>>,
-    H: FnOnce(&Hyper) -> ImmutableHyper
+    H: FnOnce(&Hyper) -> ImmutableHyper,
 {
     let sub_hypers = to_immutable(&hyper);
     let mut gradient_hyper: BaseGradientDescentHyper<T, R> = hyper.into();
@@ -153,7 +151,8 @@ fn main() {
     ];
     let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 
-    let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000).with_mu(NotNan::new(0.9).expect("not nan"));
+    let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+        .with_mu(NotNan::new(0.9).expect("not nan"));
 
     let iterated = {
         let xs = to_not_nan_2(plane_xs);
@@ -171,7 +170,7 @@ fn main() {
             &ys,
             zero_params,
             velocity_plane_predictor(),
-            VelocityGradientDescentHyper::to_immutable
+            VelocityGradientDescentHyper::to_immutable,
         )
     };
 
@@ -189,14 +188,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use rand::rngs::StdRng;
     use super::*;
+    use crate::hyper::RmsGradientDescentHyper;
     use little_learner::loss::{
         line_unranked_predictor, plane_predictor, predict_plane, quadratic_unranked_predictor,
-        rms_predictor
+        rms_predictor,
     };
+    use rand::rngs::StdRng;
     use rand::SeedableRng;
-    use crate::hyper::RmsGradientDescentHyper;
 
     #[test]
     fn test_iterate() {
@@ -226,7 +225,7 @@ mod tests {
                 &ys,
                 zero_params,
                 line_unranked_predictor(),
-                BaseGradientDescentHyper::to_immutable
+                BaseGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -261,7 +260,7 @@ mod tests {
                 &ys,
                 zero_params,
                 quadratic_unranked_predictor(),
-                BaseGradientDescentHyper::to_immutable
+                BaseGradientDescentHyper::to_immutable,
             )
         };
         let iterated = iterated
@@ -303,7 +302,7 @@ mod tests {
                 &ys,
                 zero_params,
                 plane_predictor(),
-                BaseGradientDescentHyper::to_immutable
+                BaseGradientDescentHyper::to_immutable,
             )
         };
 
@@ -339,7 +338,7 @@ mod tests {
                 &ys,
                 zero_params,
                 plane_predictor(),
-                BaseGradientDescentHyper::to_immutable
+                BaseGradientDescentHyper::to_immutable,
             )
         };
 
@@ -383,11 +382,8 @@ mod tests {
 
     #[test]
     fn test_with_velocity() {
-        let hyper = VelocityGradientDescentHyper::naked(
-            NotNan::new(0.001).expect("not nan"),
-            1000).with_mu(
-            NotNan::new(0.9).expect("not nan"),
-        );
+        let hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+            .with_mu(NotNan::new(0.9).expect("not nan"));
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -405,7 +401,7 @@ mod tests {
                 &ys,
                 zero_params,
                 velocity_plane_predictor(),
-                VelocityGradientDescentHyper::to_immutable
+                VelocityGradientDescentHyper::to_immutable,
             )
         };
 
@@ -425,11 +421,8 @@ mod tests {
     fn test_with_rms() {
         let beta = NotNan::new(0.9).expect("not nan");
         let stabilizer = NotNan::new(0.00000001).expect("not nan");
-        let hyper = RmsGradientDescentHyper::default(
-            NotNan::new(0.001).expect("not nan"),
-            3000,
-        )
-        .with_stabilizer(stabilizer)
+        let hyper = RmsGradientDescentHyper::default(NotNan::new(0.001).expect("not nan"), 3000)
+            .with_stabilizer(stabilizer)
             .with_beta(beta);
 
         let iterated = {
@@ -448,7 +441,7 @@ mod tests {
                 &ys,
                 zero_params,
                 rms_predictor(predict_plane),
-                RmsGradientDescentHyper::to_immutable
+                RmsGradientDescentHyper::to_immutable,
             )
         };
 
