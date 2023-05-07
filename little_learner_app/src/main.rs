@@ -5,7 +5,7 @@ mod sample;
 mod with_tensor;
 
 use core::hash::Hash;
-use rand::Rng;
+use rand::{Rng};
 
 use little_learner::auto_diff::{
     grad, Differentiable, RankedDifferentiable, RankedDifferentiableTagged,
@@ -19,6 +19,7 @@ use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::scalar::Scalar;
 use little_learner::traits::{NumLike, Zero};
 use ordered_float::NotNan;
+use rand::rngs::StdRng;
 
 fn iterate<A, F>(mut f: F, start: A, n: u32) -> A
 where
@@ -31,115 +32,151 @@ where
     v
 }
 
-#[derive(Clone)]
-struct GradientDescentHyperImmut<A> {
-    learning_rate: A,
-    iterations: u32,
-    mu: A,
-    stabilizer: A,
-    beta: A,
-}
-
-impl<A> GradientDescentHyperImmut<A> {
-    fn with_iterations(self, iterations: u32) -> Self {
-        GradientDescentHyperImmut {
-            learning_rate: self.learning_rate,
-            iterations,
-            mu: self.mu,
-            stabilizer: self.stabilizer,
-            beta: self.beta,
-        }
-    }
-
-    fn with_adam(self, stabilizer: A, beta: A) -> Self {
-        GradientDescentHyperImmut {
-            learning_rate: self.learning_rate,
-            iterations: self.iterations,
-            mu: self.mu,
-            stabilizer,
-            beta,
-        }
-    }
-}
-
-struct GradientDescentHyper<A, R: Rng> {
+struct BaseGradientDescentHyper<A, R: Rng> {
     sampling: Option<(R, usize)>,
-    params: GradientDescentHyperImmut<A>,
+    iterations: u32,
+    params: NakedHypers<A>,
 }
 
-impl<A> From<GradientDescentHyperImmut<A>> for VelocityHypers<A> {
-    fn from(val: GradientDescentHyperImmut<A>) -> VelocityHypers<A> {
-        VelocityHypers {
-            learning_rate: val.learning_rate,
-            mu: val.mu,
-        }
-    }
-}
-
-impl<A> From<GradientDescentHyperImmut<A>> for NakedHypers<A> {
-    fn from(val: GradientDescentHyperImmut<A>) -> NakedHypers<A> {
-        NakedHypers {
-            learning_rate: val.learning_rate,
-        }
-    }
-}
-
-impl<A> From<GradientDescentHyperImmut<A>> for RmsHyper<A> {
-    fn from(val: GradientDescentHyperImmut<A>) -> RmsHyper<A> {
-        RmsHyper {
-            learning_rate: val.learning_rate,
-            beta: val.beta,
-            stabilizer: val.stabilizer,
-        }
-    }
-}
-
-impl<A> GradientDescentHyper<A, rand::rngs::StdRng>
+impl<A> BaseGradientDescentHyper<A, StdRng>
 where
     A: NumLike + NumLike,
 {
     fn naked(learning_rate: A, iterations: u32) -> Self {
-        let two = A::one() + A::one();
-        let ten = two.clone() * two.clone() * two.clone() + two.clone();
-        let hundred = ten.clone() * ten.clone();
-        let myriad = hundred.clone() * hundred;
-        let one_e_minus_eight = A::one() / (myriad.clone() * myriad);
-        GradientDescentHyper {
-            params: GradientDescentHyperImmut {
+        BaseGradientDescentHyper {
+            params: NakedHypers {
                 learning_rate,
-                iterations,
-                mu: A::zero(),
-                stabilizer: one_e_minus_eight,
-                beta: A::one() + -(A::one() / ten),
             },
+            iterations,
             sampling: None,
         }
     }
 
-    fn with_mu(learning_rate: A, iterations: u32, mu: A) -> Self {
-        let mut answer = GradientDescentHyper::naked(learning_rate, iterations);
-        answer.params.mu = mu;
-        answer
-    }
-
-    fn with_rng<S: Rng>(self, rng: S, size: usize) -> GradientDescentHyper<A, S> {
-        GradientDescentHyper {
+    fn with_rng<S: Rng>(self, rng: S, size: usize) -> BaseGradientDescentHyper<A, S> {
+        BaseGradientDescentHyper {
             params: self.params,
+            iterations: self.iterations,
             sampling: Some((rng, size)),
         }
     }
 
-    fn with_adam(self, stabilizer: A, beta: A) -> Self {
-        GradientDescentHyper {
+    fn with_iterations(self, n: u32) -> Self {
+        BaseGradientDescentHyper {
             sampling: self.sampling,
-            params: self.params.with_adam(stabilizer, beta),
+            iterations: n,
+            params: self.params
+        }
+    }
+}
+
+#[derive(Clone)]
+struct VelocityGradientDescentHyper<A, R: Rng> {
+    sampling: Option<(R, usize)>,
+    learning_rate: A,
+    iterations: u32,
+    mu: A,
+}
+
+impl<A> VelocityGradientDescentHyper<A, StdRng> where A: Zero {
+    fn naked(learning_rate: A, iterations: u32) -> Self {
+        VelocityGradientDescentHyper {
+            sampling: None,
+            learning_rate,
+            iterations,
+            mu: A::zero()
+        }
+    }
+}
+
+impl<A, R: Rng> VelocityGradientDescentHyper<A, R> {
+    fn with_mu(self, mu: A) -> Self {
+        VelocityGradientDescentHyper {
+            sampling: self.sampling,
+            mu,
+            learning_rate: self.learning_rate,
+            iterations: self.iterations
         }
     }
 
-    fn with_iterations(self, n: u32) -> Self {
-        GradientDescentHyper {
+    fn to_immutable(&self) -> VelocityHypers<A> where A: Clone {
+        VelocityHypers {
+            mu: self.mu.clone(),
+            learning_rate: self.learning_rate.clone()
+        }
+    }
+}
+
+impl<A, R: Rng> Into<BaseGradientDescentHyper<A, R>> for VelocityGradientDescentHyper<A, R> {
+    fn into(self) -> BaseGradientDescentHyper<A, R> {
+        BaseGradientDescentHyper {
             sampling: self.sampling,
-            params: self.params.with_iterations(n),
+            iterations: self.iterations,
+            params: NakedHypers {
+                learning_rate: self.learning_rate
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct RmsGradientDescentHyper<A, R: Rng> {
+    sampling: Option<(R, usize)>,
+    iterations: u32,
+    rms: RmsHyper<A>,
+}
+
+impl<A> RmsGradientDescentHyper<A, StdRng> where A: Zero {
+    fn default(learning_rate: A, iterations: u32) -> Self {
+        RmsGradientDescentHyper {
+            sampling: None,
+            iterations,
+            rms: RmsHyper {
+                stabilizer: (),
+                beta: (),
+                learning_rate
+            }
+        }
+    }
+}
+
+impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
+    fn with_stabilizer(self, stabilizer: A) -> Self {
+        RmsGradientDescentHyper {
+            sampling: self.sampling,
+            rms: RmsHyper {
+                stabilizer,
+                beta: self.rms.beta,
+                learning_rate: self.rms.learning_rate,
+            },
+            iterations: self.iterations
+        }
+    }
+
+    fn with_beta(self, beta: A) -> Self {
+        RmsGradientDescentHyper {
+            sampling: self.sampling,
+            rms: RmsHyper {
+                stabilizer: self.rms.stabilizer,
+                beta,
+                learning_rate: self.rms.learning_rate,
+            },
+            iterations: self.iterations
+        }
+    }
+
+    fn to_immutable(&self) -> RmsHyper<A> where A: Clone {
+        self.rms.clone()
+    }
+}
+
+impl<A, R: Rng> Into<BaseGradientDescentHyper<A, R>> for RmsGradientDescentHyper<A, R> {
+    fn into(self) -> BaseGradientDescentHyper<A, R> {
+        BaseGradientDescentHyper {
+            sampling: self.sampling,
+            iterations: self.iterations,
+            params: NakedHypers {
+                learning_rate: self.rms.learning_rate
+            }
         }
     }
 }
@@ -186,17 +223,20 @@ fn gradient_descent<
     Point,
     F,
     G,
+    H,
     Inflated,
     Hyper,
+    ImmutableHyper,
     const IN_SIZE: usize,
     const PARAM_NUM: usize,
 >(
-    hyper: &mut GradientDescentHyper<T, R>,
+    hyper: Hyper,
     xs: &'a [Point],
     to_ranked_differentiable: G,
     ys: &[T],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut predictor: Predictor<F, Inflated, Differentiable<T>, Hyper>,
+    mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
+    to_immutable: H
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
@@ -207,14 +247,17 @@ where
     ) -> RankedDifferentiable<T, 1>,
     G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
     Inflated: Clone,
-    Hyper: Clone,
-    GradientDescentHyperImmut<T>: Into<Hyper>,
+    ImmutableHyper: Clone,
+    Hyper: Into<BaseGradientDescentHyper<T, R>>,
+    H: FnOnce(&Hyper) -> ImmutableHyper
 {
-    let iterations = hyper.params.iterations;
+    let sub_hypers = to_immutable(&hyper);
+    let mut gradient_hyper: BaseGradientDescentHyper<T, R> = hyper.into();
+    let iterations = gradient_hyper.iterations;
     let out = iterate(
         |theta| {
             general_gradient_descent_step(
-                &mut |x| match hyper.sampling.as_mut() {
+                &mut |x| match gradient_hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
                             &predictor.predict,
@@ -237,7 +280,7 @@ where
                 },
                 theta,
                 predictor.deflate,
-                hyper.params.clone().into(),
+                sub_hypers.clone(),
                 predictor.update,
             )
         },
@@ -258,11 +301,7 @@ fn main() {
     ];
     let plane_ys = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 
-    let mut hyper = GradientDescentHyper::with_mu(
-        NotNan::new(0.001).expect("not nan"),
-        1000,
-        NotNan::new(0.9).expect("not nan"),
-    );
+    let mut hyper = VelocityGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000).with_mu(NotNan::new(0.9).expect("not nan"));
 
     let iterated = {
         let xs = to_not_nan_2(plane_xs);
@@ -274,12 +313,13 @@ fn main() {
         ];
 
         gradient_descent(
-            &mut hyper,
+            hyper,
             &xs,
             RankedDifferentiableTagged::of_slice_2::<_, 2>,
             &ys,
             zero_params,
             velocity_plane_predictor(),
+            VelocityGradientDescentHyper::to_immutable
         )
     };
 
@@ -317,7 +357,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let mut hyper = GradientDescentHyper::naked(NotNan::new(0.01).expect("not nan"), 1000);
+        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.01).expect("not nan"), 1000);
         let iterated = {
             let xs = to_not_nan_1(xs);
             let ys = to_not_nan_1(ys);
@@ -326,12 +366,13 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 line_unranked_predictor(),
+                |&x| x.params.clone()
             )
         };
         let iterated = iterated
@@ -349,7 +390,7 @@ mod tests {
 
         let zero = Scalar::<NotNan<f64>>::zero();
 
-        let mut hyper = GradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
+        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_1(xs);
@@ -360,12 +401,13 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 quadratic_unranked_predictor(),
+                |&x| x.params.clone()
             )
         };
         let iterated = iterated
@@ -391,7 +433,7 @@ mod tests {
 
     #[test]
     fn optimise_plane() {
-        let mut hyper = GradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
+        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000);
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -401,12 +443,13 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 plane_predictor(),
+                |&x| x.params.clone()
             )
         };
 
@@ -424,8 +467,8 @@ mod tests {
 
     #[test]
     fn optimise_plane_with_sampling() {
-        let rng = rand::rngs::StdRng::seed_from_u64(314159);
-        let mut hyper = GradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
+        let rng = StdRng::seed_from_u64(314159);
+        let mut hyper = BaseGradientDescentHyper::naked(NotNan::new(0.001).expect("not nan"), 1000)
             .with_rng(rng, 4);
 
         let iterated = {
@@ -436,12 +479,13 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiable::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 plane_predictor(),
+                |&x| x.params.clone()
             )
         };
 
@@ -485,9 +529,9 @@ mod tests {
 
     #[test]
     fn test_with_velocity() {
-        let mut hyper = GradientDescentHyper::with_mu(
+        let mut hyper = VelocityGradientDescentHyper::naked(
             NotNan::new(0.001).expect("not nan"),
-            1000,
+            1000).with_mu(
             NotNan::new(0.9).expect("not nan"),
         );
 
@@ -501,12 +545,13 @@ mod tests {
             ];
 
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiableTagged::of_slice_2::<_, 2>,
                 &ys,
                 zero_params,
                 velocity_plane_predictor(),
+                |&x| x.params.clone()
             )
         };
 
@@ -526,13 +571,12 @@ mod tests {
     fn test_with_rms() {
         let beta = NotNan::new(0.9).expect("not nan");
         let stabilizer = NotNan::new(0.00000001).expect("not nan");
-        let mut hyper = GradientDescentHyper::with_mu(
+        let mut hyper = RmsGradientDescentHyper::default(
             NotNan::new(0.001).expect("not nan"),
-            1000,
-            NotNan::new(0.9).expect("not nan"),
+            3000,
         )
-        .with_adam(stabilizer, beta)
-        .with_iterations(3000);
+        .with_stabilizer(stabilizer)
+            .with_beta(beta);
 
         let iterated = {
             let xs = to_not_nan_2(PLANE_XS);
@@ -544,7 +588,7 @@ mod tests {
             ];
 
             gradient_descent(
-                &mut hyper,
+                hyper,
                 &xs,
                 RankedDifferentiableTagged::of_slice_2::<_, 2>,
                 &ys,
