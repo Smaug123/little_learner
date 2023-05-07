@@ -245,12 +245,6 @@ pub struct Predictor<F, Inflated, Deflated, Params> {
     pub update: fn(Inflated, &Deflated, Params) -> Inflated,
 }
 
-type ParameterPredictor<T, const INPUT_DIM: usize, const THETA: usize> =
-    fn(
-        RankedDifferentiable<T, INPUT_DIM>,
-        &[Differentiable<T>; THETA],
-    ) -> RankedDifferentiable<T, 1>;
-
 #[derive(Clone)]
 pub struct NakedHypers<A> {
     pub learning_rate: A,
@@ -341,42 +335,6 @@ where
             })
         },
     }
-}
-
-pub const fn plane_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 2, 2>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
-where
-    T: NumLike + Default,
-{
-    naked_predictor(predict_plane)
-}
-
-pub const fn velocity_plane_predictor<T>() -> Predictor<
-    ParameterPredictor<T, 2, 2>,
-    DifferentiableTagged<T, T>,
-    Differentiable<T>,
-    VelocityHypers<T>,
->
-where
-    T: NumLike + Default,
-{
-    velocity_predictor(predict_plane)
-}
-
-pub const fn line_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 2>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
-where
-    T: NumLike + Default + Copy,
-{
-    naked_predictor(predict_line_2_unranked)
-}
-
-pub const fn quadratic_unranked_predictor<T>(
-) -> Predictor<ParameterPredictor<T, 1, 3>, Differentiable<T>, Differentiable<T>, NakedHypers<T>>
-where
-    T: NumLike + Default,
-{
-    naked_predictor(predict_quadratic_unranked)
 }
 
 #[cfg(test)]
