@@ -210,7 +210,7 @@ where
     })
 }
 
-// The parameters are: a tensor1 of length 2 (to be dotted with the input), and a scalar (to translate).
+/// The parameters are: a tensor1 of length 2 (to be dotted with the input), and a scalar (to translate).
 pub fn predict_plane<A>(
     xs: RankedDifferentiable<A, 2>,
     theta: &[Differentiable<A>; 2],
@@ -238,13 +238,22 @@ where
     RankedDifferentiable::of_vector(dotted)
 }
 
+/// A Predictor is a function (`predict`) we're optimising, an `inflate` which adds any metadata
+/// that the prediction engine might require, a corresponding `deflate` which removes the metadata,
+/// and an `update` which computes the next guess based on the previous guess.
 pub struct Predictor<F, Inflated, Deflated, Params> {
+    /// The function we're trying to optimise.
     pub predict: F,
+    /// Attach prediction metadata to an input to the function we're trying to optimise.
     pub inflate: fn(Deflated) -> Inflated,
+    /// Remove prediction metadata.
     pub deflate: fn(Inflated) -> Deflated,
+    /// Given a guess at an optimum, the gradient at that point, and any hyperparameters,
+    /// compute the next guess at the optimum.
     pub update: fn(Inflated, &Deflated, Params) -> Inflated,
 }
 
+/// Hyperparameters applying to the most basic way to calculate the next step.
 #[derive(Clone)]
 pub struct NakedHypers<A> {
     pub learning_rate: A,

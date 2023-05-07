@@ -1,5 +1,6 @@
 use rand::Rng;
 
+/// Grab `n` random samples from `from_x` and `from_y`, collecting them into a vector.
 pub fn sample2<R: Rng, T, U, I, J>(rng: &mut R, n: usize, from_x: I, from_y: J) -> (Vec<T>, Vec<U>)
 where
     T: Copy,

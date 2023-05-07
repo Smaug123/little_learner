@@ -2,6 +2,7 @@ use crate::loss::{NakedHypers, RmsHyper, VelocityHypers};
 use crate::traits::{NumLike, Zero};
 use rand::{rngs::StdRng, Rng};
 
+/// Hyperparameters which apply to any possible optimisation algorithm that uses gradient descent.t
 pub struct BaseGradientDescentHyper<A, R: Rng> {
     pub sampling: Option<(R, usize)>,
     pub iterations: u32,
@@ -12,7 +13,6 @@ impl<A> BaseGradientDescentHyper<A, StdRng>
 where
     A: NumLike + NumLike,
 {
-    #[allow(dead_code)]
     pub fn naked(learning_rate: A, iterations: u32) -> Self {
         BaseGradientDescentHyper {
             params: NakedHypers { learning_rate },
@@ -21,7 +21,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     pub fn with_rng<S: Rng>(self, rng: S, size: usize) -> BaseGradientDescentHyper<A, S> {
         BaseGradientDescentHyper {
             params: self.params,
@@ -30,7 +29,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     pub fn with_iterations(self, n: u32) -> Self {
         BaseGradientDescentHyper {
             sampling: self.sampling,
@@ -39,7 +37,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     pub fn to_immutable(&self) -> NakedHypers<A> {
         self.params.clone()
     }
@@ -57,7 +54,6 @@ impl<A> VelocityGradientDescentHyper<A, StdRng>
 where
     A: Zero,
 {
-    #[allow(dead_code)]
     pub fn naked(learning_rate: A, iterations: u32) -> Self {
         VelocityGradientDescentHyper {
             sampling: None,
@@ -69,7 +65,6 @@ where
 }
 
 impl<A, R: Rng> VelocityGradientDescentHyper<A, R> {
-    #[allow(dead_code)]
     pub fn with_mu(self, mu: A) -> Self {
         VelocityGradientDescentHyper {
             sampling: self.sampling,
@@ -79,7 +74,6 @@ impl<A, R: Rng> VelocityGradientDescentHyper<A, R> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn to_immutable(&self) -> VelocityHypers<A>
     where
         A: Clone,
@@ -111,7 +105,6 @@ pub struct RmsGradientDescentHyper<A, R: Rng> {
 }
 
 impl<A> RmsGradientDescentHyper<A, StdRng> {
-    #[allow(dead_code)]
     pub fn default(learning_rate: A, iterations: u32) -> Self
     where
         A: NumLike,
@@ -135,7 +128,6 @@ impl<A> RmsGradientDescentHyper<A, StdRng> {
 }
 
 impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
-    #[allow(dead_code)]
     pub fn with_stabilizer(self, stabilizer: A) -> Self {
         RmsGradientDescentHyper {
             sampling: self.sampling,
@@ -148,7 +140,6 @@ impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn with_beta(self, beta: A) -> Self {
         RmsGradientDescentHyper {
             sampling: self.sampling,
@@ -161,7 +152,6 @@ impl<A, R: Rng> RmsGradientDescentHyper<A, R> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn to_immutable(&self) -> RmsHyper<A>
     where
         A: Clone,

@@ -1,17 +1,15 @@
 use immutable_chunkmap::map;
 use std::ops::{Add, Mul};
 
-/*
-An untyped syntax tree for an expression whose constants are all of type `A`.
-*/
+/// An untyped syntax tree for an expression whose constants are all of type `A`.
 #[derive(Clone, Debug)]
 pub enum Expr<A> {
     Const(A),
     Sum(Box<Expr<A>>, Box<Expr<A>>),
     Variable(u32),
-    // The first `Expr` here is a function, which may reference the input variable `Variable(i)`.
-    // For example, `(fun x y -> x + y) 3 4` is expressed as:
-    // Apply(0, Apply(1, Sum(Variable(0), Variable(1)), Const(4)), Const(3))
+    /// The first `Expr` here is a function, which may reference the input variable `Variable(i)`.
+    /// For example, `(fun x y -> x + y) 3 4` is expressed as:
+    /// `Apply(0, Apply(1, Sum(Variable(0), Variable(1)), Const(4)), Const(3))`
     Apply(u32, Box<Expr<A>>, Box<Expr<A>>),
     Mul(Box<Expr<A>>, Box<Expr<A>>),
 }

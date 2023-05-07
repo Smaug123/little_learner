@@ -3,10 +3,12 @@ use crate::scalar::Scalar;
 use crate::traits::One;
 use std::ops::{Add, Mul, Neg};
 
+/// Combine `old_value` and `new_value`, weighting the combination towards `new_value` by a factor
+/// of `decay`.
 pub fn smooth_tagged<A, F, Tag1, Tag2, Tag3>(
     decay: Scalar<A>,
-    current_avg: &DifferentiableTagged<A, Tag1>,
-    grad: &DifferentiableTagged<A, Tag2>,
+    old_value: &DifferentiableTagged<A, Tag1>,
+    new_value: &DifferentiableTagged<A, Tag2>,
     mut tags: F,
 ) -> DifferentiableTagged<A, Tag3>
 where
@@ -15,23 +17,25 @@ where
     Tag1: Clone,
     Tag2: Clone,
 {
-    DifferentiableTagged::map2_tagged(current_avg, grad, &mut |avg, tag1, grad, tag2| {
+    DifferentiableTagged::map2_tagged(old_value, new_value, &mut |old, tag1, new, tag2| {
         (
-            (avg.clone() * decay.clone()) + (grad.clone() * (Scalar::<A>::one() + -decay.clone())),
+            (old.clone() * decay.clone()) + (new.clone() * (Scalar::<A>::one() + -decay.clone())),
             tags(tag1, tag2),
         )
     })
 }
 
+/// Combine `old_value` and `new_value`, weighting the combination towards `new_value` by a factor
+/// of `decay`.
 pub fn smooth<A>(
     decay: Scalar<A>,
-    current_avg: &Differentiable<A>,
-    grad: &Differentiable<A>,
+    old_value: &Differentiable<A>,
+    new_value: &Differentiable<A>,
 ) -> Differentiable<A>
 where
     A: One + Clone + Mul<Output = A> + Neg<Output = A> + Add<Output = A>,
 {
-    smooth_tagged(decay, current_avg, grad, |(), ()| ())
+    smooth_tagged(decay, old_value, new_value, |(), ()| ())
 }
 
 #[cfg(test)]
