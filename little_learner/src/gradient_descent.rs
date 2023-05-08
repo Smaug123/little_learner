@@ -413,7 +413,8 @@ mod tests {
         let beta = NotNan::new(0.9).expect("not nan");
         let stabilizer = NotNan::new(0.00000001).expect("not nan");
         let mu = NotNan::new(0.85).expect("not nan");
-        let hyper = hyper::AdamGradientDescent::default(NotNan::new(0.001).expect("not nan"), 1500)
+        // Erratum in the book: they printed 0.001 but intended 0.01.
+        let hyper = hyper::AdamGradientDescent::default(NotNan::new(0.01).expect("not nan"), 1500)
             .with_stabilizer(stabilizer)
             .with_beta(beta)
             .with_mu(mu);
@@ -449,7 +450,10 @@ mod tests {
             .map(|x| x.into_inner())
             .collect::<Vec<_>>();
         let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
-        assert_eq!(fitted_theta0, [3.985_350_099_342_649, 1.9745945728216352]);
-        assert_eq!(fitted_theta1, 6.164_222_983_181_168);
+        assert_eq!(
+            fitted_theta0,
+            [3.980_262_420_345_729_5, 1.977_071_898_301_443_9]
+        );
+        assert_eq!(fitted_theta1, 6.170_196_024_282_712_5);
     }
 }

@@ -1,7 +1,7 @@
 use crate::auto_diff::{Differentiable, DifferentiableTagged};
 use crate::scalar::Scalar;
 use crate::smooth::smooth;
-use crate::traits::{NumLike, Sqrt};
+use crate::traits::NumLike;
 
 /// A Predictor is a function (`predict`) we're optimising, an `inflate` which adds any metadata
 /// that the prediction engine might require, a corresponding `deflate` which removes the metadata,
@@ -155,9 +155,9 @@ impl<A> AdamHyper<A> {
     }
 }
 
-pub const fn adam<F, A>(
-    f: F,
-) -> Predictor<F, DifferentiableTagged<A, (A, A)>, Differentiable<A>, AdamHyper<A>>
+type AdamInflated<A> = DifferentiableTagged<A, (A, A)>;
+
+pub const fn adam<F, A>(f: F) -> Predictor<F, AdamInflated<A>, Differentiable<A>, AdamHyper<A>>
 where
     A: NumLike,
 {
@@ -172,7 +172,7 @@ where
                 &mut |theta, (smoothed_velocity, smoothed_r), delta, ()| {
                     let r = smooth(
                         Scalar::make(hyper.rms.beta.clone()),
-                        &Differentiable::of_scalar(Scalar::make(smoothed_r.clone())),
+                        &Differentiable::of_scalar(Scalar::make(smoothed_r)),
                         &Differentiable::of_scalar(delta.clone() * delta.clone()),
                     )
                     .into_scalar();
