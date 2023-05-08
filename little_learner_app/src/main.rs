@@ -62,9 +62,9 @@ fn main() {
     let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
     assert_eq!(
         fitted_theta0,
-        [3.974_645_444_172_085_1, 1.971_454_922_077_495_1]
+        [3.974_645_444_172_085, 1.971_454_922_077_495]
     );
-    assert_eq!(fitted_theta1, 6.164_579_048_274_036_1);
+    assert_eq!(fitted_theta1, 6.164_579_048_274_036);
 }
 
 #[cfg(test)]
