@@ -2,7 +2,7 @@ use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
 use crate::hyper;
 use crate::loss::l2_loss_2;
 use crate::predictor::Predictor;
-use crate::sample::sample2;
+use crate::sample;
 use crate::traits::NumLike;
 use rand::Rng;
 use std::hash::Hash;
@@ -105,7 +105,7 @@ where
                         ),
                     )]),
                     Some((rng, batch_size)) => {
-                        let (sampled_xs, sampled_ys) = sample2(rng, *batch_size, xs, ys);
+                        let (sampled_xs, sampled_ys) = sample::take_2(rng, *batch_size, xs, ys);
                         RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                             l2_loss_2(
                                 &predictor.predict,
@@ -369,7 +369,7 @@ mod tests {
     fn test_with_rms() {
         let beta = NotNan::new(0.9).expect("not nan");
         let stabilizer = NotNan::new(0.00000001).expect("not nan");
-        let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.001).expect("not nan"), 3000)
+        let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.01).expect("not nan"), 3000)
             .with_stabilizer(stabilizer)
             .with_beta(beta);
 
@@ -404,7 +404,56 @@ mod tests {
             .map(|x| x.into_inner())
             .collect::<Vec<_>>();
         let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
-        assert_eq!(fitted_theta0, [3.985_350_099_342_649, 1.9745945728216352]);
-        assert_eq!(fitted_theta1, 6.164_222_983_181_168);
+        assert_eq!(fitted_theta0, [3.9746454441720851, 1.9714549220774951]);
+        assert_eq!(fitted_theta1, 6.1645790482740361);
+    }
+
+    #[test]
+    fn test_with_adam() {
+        let beta = NotNan::new(0.9).expect("not nan");
+        let stabilizer = NotNan::new(0.00000001).expect("not nan");
+        let mu = NotNan::new(0.85).expect("not nan");
+        // Erratum in the book: they printed 0.001 but intended 0.01.
+        let hyper = hyper::AdamGradientDescent::default(NotNan::new(0.01).expect("not nan"), 1500)
+            .with_stabilizer(stabilizer)
+            .with_beta(beta)
+            .with_mu(mu);
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()])
+                    .to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                predictor::adam(predict_plane),
+                hyper::AdamGradientDescent::to_immutable,
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
+        let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
+
+        let fitted_theta0 = theta0
+            .collect()
+            .iter()
+            .map(|x| x.into_inner())
+            .collect::<Vec<_>>();
+        let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
+        assert_eq!(
+            fitted_theta0,
+            [3.980_262_420_345_729_5, 1.977_071_898_301_443_9]
+        );
+        assert_eq!(fitted_theta1, 6.170_196_024_282_712_5);
     }
 }
