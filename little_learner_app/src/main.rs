@@ -25,7 +25,7 @@ const PLANE_YS: [f64; 6] = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 fn main() {
     let beta = NotNan::new(0.9).expect("not nan");
     let stabilizer = NotNan::new(0.000_000_01).expect("not nan");
-    let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.001).expect("not nan"), 3000)
+    let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.01).expect("not nan"), 3000)
         .with_stabilizer(stabilizer)
         .with_beta(beta);
 
@@ -62,9 +62,9 @@ fn main() {
     let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
     assert_eq!(
         fitted_theta0,
-        [3.985_350_099_342_649, 1.974_594_572_821_635_2]
+        [3.974_645_444_172_085_1, 1.971_454_922_077_495_1]
     );
-    assert_eq!(fitted_theta1, 6.164_222_983_181_168);
+    assert_eq!(fitted_theta1, 6.164_579_048_274_036_1);
 }
 
 #[cfg(test)]
