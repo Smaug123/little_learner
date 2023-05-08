@@ -12,3 +12,4 @@ pub mod sample;
 pub mod scalar;
 pub mod smooth;
 pub mod traits;
+pub mod decider;
