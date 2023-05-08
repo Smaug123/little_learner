@@ -2,7 +2,7 @@ use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
 use crate::hyper;
 use crate::loss::l2_loss_2;
 use crate::predictor::Predictor;
-use crate::sample::sample2;
+use crate::sample;
 use crate::traits::NumLike;
 use rand::Rng;
 use std::hash::Hash;
@@ -105,7 +105,7 @@ where
                         ),
                     )]),
                     Some((rng, batch_size)) => {
-                        let (sampled_xs, sampled_ys) = sample2(rng, *batch_size, xs, ys);
+                        let (sampled_xs, sampled_ys) = sample::take_2(rng, *batch_size, xs, ys);
                         RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                             l2_loss_2(
                                 &predictor.predict,
