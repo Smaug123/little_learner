@@ -1,5 +1,6 @@
 use crate::traits::{Exp, One, Sqrt, Zero};
 use core::hash::Hash;
+use std::cmp::Ordering;
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Display,
@@ -234,6 +235,15 @@ where
             answer += i;
         }
         answer
+    }
+}
+
+impl<A> PartialOrd for Scalar<A>
+where
+    A: PartialOrd + Clone,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.real_part().partial_cmp(other.real_part())
     }
 }
 
