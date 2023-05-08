@@ -369,7 +369,7 @@ mod tests {
     fn test_with_rms() {
         let beta = NotNan::new(0.9).expect("not nan");
         let stabilizer = NotNan::new(0.00000001).expect("not nan");
-        let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.001).expect("not nan"), 3000)
+        let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.01).expect("not nan"), 3000)
             .with_stabilizer(stabilizer)
             .with_beta(beta);
 
@@ -390,6 +390,51 @@ mod tests {
                 zero_params,
                 predictor::rms(predict_plane),
                 hyper::RmsGradientDescent::to_immutable,
+            )
+        };
+
+        let [theta0, theta1] = iterated;
+
+        let theta0 = theta0.attach_rank::<1>().expect("rank 1 tensor");
+        let theta1 = theta1.attach_rank::<0>().expect("rank 0 tensor");
+
+        let fitted_theta0 = theta0
+            .collect()
+            .iter()
+            .map(|x| x.into_inner())
+            .collect::<Vec<_>>();
+        let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
+        assert_eq!(fitted_theta0, [3.9746454441720851, 1.9714549220774951]);
+        assert_eq!(fitted_theta1, 6.1645790482740361);
+    }
+
+    #[test]
+    fn test_with_adam() {
+        let beta = NotNan::new(0.9).expect("not nan");
+        let stabilizer = NotNan::new(0.00000001).expect("not nan");
+        let mu = NotNan::new(0.85).expect("not nan");
+        let hyper = hyper::AdamGradientDescent::default(NotNan::new(0.001).expect("not nan"), 1500)
+            .with_stabilizer(stabilizer)
+            .with_beta(beta)
+            .with_mu(mu);
+
+        let iterated = {
+            let xs = to_not_nan_2(PLANE_XS);
+            let ys = to_not_nan_1(PLANE_YS);
+            let zero_params = [
+                RankedDifferentiable::of_slice(&[NotNan::<f64>::zero(), NotNan::<f64>::zero()])
+                    .to_unranked(),
+                Differentiable::of_scalar(Scalar::zero()),
+            ];
+
+            gradient_descent(
+                hyper,
+                &xs,
+                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &ys,
+                zero_params,
+                predictor::adam(predict_plane),
+                hyper::AdamGradientDescent::to_immutable,
             )
         };
 
