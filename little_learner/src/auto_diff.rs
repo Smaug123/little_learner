@@ -145,13 +145,12 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
 
     fn map_tag<Tag2, F>(&self, f: &mut F) -> DifferentiableContents<A, Tag2>
     where
-        F: FnMut(Tag) -> Tag2,
+        F: FnMut(&Tag) -> Tag2,
         A: Clone,
-        Tag: Clone,
     {
         match self {
             DifferentiableContents::Scalar(a, tag) => {
-                DifferentiableContents::Scalar((*a).clone(), f((*tag).clone()))
+                DifferentiableContents::Scalar((*a).clone(), f(tag))
             }
             DifferentiableContents::Vector(slice, rank) => {
                 DifferentiableContents::Vector(slice.iter().map(|x| x.map_tag(f)).collect(), *rank)
@@ -253,9 +252,8 @@ impl<A, Tag> DifferentiableTagged<A, Tag> {
 
     pub fn map_tag<Tag2, F>(&self, f: &mut F) -> DifferentiableTagged<A, Tag2>
     where
-        F: FnMut(Tag) -> Tag2,
+        F: FnMut(&Tag) -> Tag2,
         A: Clone,
-        Tag: Clone,
     {
         DifferentiableTagged {
             contents: self.contents.map_tag(f),
@@ -572,13 +570,12 @@ impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
     }
 
     pub fn map_tag<Tag2, F>(
-        self: RankedDifferentiableTagged<A, Tag, RANK>,
+        self: &RankedDifferentiableTagged<A, Tag, RANK>,
         f: &mut F,
     ) -> RankedDifferentiableTagged<A, Tag2, RANK>
     where
         A: Clone,
-        F: FnMut(Tag) -> Tag2,
-        Tag: Clone,
+        F: FnMut(&Tag) -> Tag2,
     {
         RankedDifferentiableTagged {
             contents: DifferentiableTagged::map_tag(&self.contents, f),

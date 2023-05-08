@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
-use crate::auto_diff::Differentiable;
+use crate::auto_diff::{Differentiable, RankedDifferentiableTagged};
 use crate::{
     auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
@@ -48,6 +48,23 @@ where
     A: Mul<Output = A> + Sum<<A as Mul>::Output> + Clone + Default,
 {
     dot_unranked_tagged(x, y, |(), ()| ())
+}
+
+pub fn dot<A, Tag1, Tag2>(
+    x: &RankedDifferentiableTagged<A, Tag1, 1>,
+    y: &RankedDifferentiableTagged<A, Tag2, 1>,
+) -> Scalar<A>
+where
+    A: Mul<Output = A> + Sum + Clone + Add<Output = A> + Zero,
+{
+    // Much sadness - find a way to get rid of these clones
+    let x = x.map_tag(&mut |_| ());
+    let y = y.map_tag(&mut |_| ());
+    x.to_vector()
+        .iter()
+        .zip(y.to_vector().iter())
+        .map(|(x, y)| x.clone().to_scalar() * y.clone().to_scalar())
+        .sum()
 }
 
 fn squared_2<A, const RANK: usize>(
