@@ -199,6 +199,34 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
         }
     }
 
+    pub fn map_once_tagged<B, Tag2, F>(
+        self: &DifferentiableContents<A, Tag>,
+        mut f: F,
+    ) -> DifferentiableContents<B, Tag2>
+    where
+        F: FnMut(&DifferentiableTagged<A, Tag>) -> DifferentiableTagged<B, Tag2>,
+    {
+        match self {
+            DifferentiableContents::Scalar(_, _) => {
+                panic!("can't map_once_tagged into a scalar");
+            }
+            DifferentiableContents::Vector(v, _rank) => {
+                assert_ne!(v.len(), 0, "Can't get rank of an empty vector");
+                let mut rank = 0;
+                DifferentiableContents::Vector(
+                    v.iter()
+                        .map(|x| {
+                            let result = f(x);
+                            rank = result.rank();
+                            result
+                        })
+                        .collect(),
+                    rank + 1,
+                )
+            }
+        }
+    }
+
     /// Unwraps one layer of each input, so the passed function takes inputs which have decreased
     /// the ranks of the `map2_once_tagged` input by one.
     /// Panics if passed a scalar or if the input vectors are not the same length.
@@ -332,6 +360,18 @@ impl<A, Tag> DifferentiableTagged<A, Tag> {
     {
         DifferentiableTagged {
             contents: self.contents.map2(&other.contents, f),
+        }
+    }
+
+    pub fn map_once_tagged<F, B, Tag2>(
+        self: &DifferentiableTagged<A, Tag>,
+        f: F,
+    ) -> DifferentiableTagged<B, Tag2>
+    where
+        F: FnMut(&DifferentiableTagged<A, Tag>) -> DifferentiableTagged<B, Tag2>,
+    {
+        DifferentiableTagged {
+            contents: self.contents.map_once_tagged(f),
         }
     }
 
@@ -517,6 +557,37 @@ where
 #[derive(Clone, Debug)]
 pub struct RankedDifferentiableTagged<A, Tag, const RANK: usize> {
     contents: DifferentiableTagged<A, Tag>,
+}
+
+impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
+    pub fn map_once_tagged<B, Tag2, F, const RANK2: usize>(
+        &self,
+        f: &mut F,
+    ) -> DifferentiableTagged<B, Tag2>
+    where
+        A: Clone,
+        Tag: Clone,
+        B: Clone,
+        Tag2: Clone,
+        F: FnMut(&RankedDifferentiableTagged<A, Tag, RANK2>) -> DifferentiableTagged<B, Tag2>,
+    {
+        match &self.contents.contents {
+            DifferentiableContents::Scalar(_, _) => {
+                panic!("forbidden by the types")
+            }
+            DifferentiableContents::Vector(v, rank) => {
+                assert_eq!(*rank, RANK2);
+                DifferentiableTagged {
+                    contents: DifferentiableContents::Vector(
+                        v.iter()
+                            .map(|x| f(&(*x).clone().attach_rank::<RANK2>().unwrap()))
+                            .collect(),
+                        RANK2 - 1,
+                    ),
+                }
+            }
+        }
+    }
 }
 
 impl<A, Tag, const RANK: usize> Display for RankedDifferentiableTagged<A, Tag, RANK>
