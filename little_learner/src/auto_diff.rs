@@ -69,7 +69,7 @@ where
 #[derive(Debug)]
 enum DifferentiableContents<A, Tag> {
     Scalar(Scalar<A>, Tag),
-    // Contains the rank.
+    // Contains the rank of this differentiable (i.e. one more than the rank of the inputs).
     Vector(Vec<DifferentiableTagged<A, Tag>>, usize),
 }
 
@@ -199,6 +199,64 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
         }
     }
 
+    /// Unwraps one layer of each input, so the passed function takes inputs which have decreased
+    /// the ranks of the `map2_once_tagged` input by one.
+    /// Panics if passed a scalar or if the input vectors are not the same length.
+    pub fn map2_once_tagged<B, C, Tag2, Tag3, F>(
+        self: &DifferentiableContents<A, Tag>,
+        other: &DifferentiableContents<B, Tag2>,
+        mut f: F,
+    ) -> DifferentiableContents<C, Tag3>
+    where
+        F: FnMut(
+            &DifferentiableTagged<A, Tag>,
+            &DifferentiableTagged<B, Tag2>,
+        ) -> DifferentiableTagged<C, Tag3>,
+    {
+        match (self, other) {
+            (DifferentiableContents::Scalar(_, _), _) => {
+                panic!("First arg needed to have non-scalar rank")
+            }
+            (_, DifferentiableContents::Scalar(_, _)) => {
+                panic!("Second arg needed to have non-scalar rank")
+            }
+            (
+                DifferentiableContents::Vector(v1, rank1),
+                DifferentiableContents::Vector(v2, _rank2),
+            ) => {
+                assert_eq!(
+                    v1.len(),
+                    v2.len(),
+                    "Must map two vectors of the same length, got {rank1} and {_rank2}"
+                );
+                assert_ne!(
+                    v1.len(),
+                    0,
+                    "Cannot determine a rank of a zero-length vector"
+                );
+                let mut rank = 0usize;
+                DifferentiableContents::Vector(
+                    v1.iter()
+                        .zip(v2.iter())
+                        .map(|(a, b)| {
+                            let result = f(a, b);
+                            match result.contents {
+                                DifferentiableContents::Vector(_, discovered_rank) => {
+                                    rank = discovered_rank + 1;
+                                }
+                                DifferentiableContents::Scalar(_, _) => {
+                                    rank = 1;
+                                }
+                            }
+                            result
+                        })
+                        .collect(),
+                    rank,
+                )
+            }
+        }
+    }
+
     fn of_slice<'a, T, I>(tag: Tag, input: I) -> DifferentiableContents<T, Tag>
     where
         T: Clone + 'a,
@@ -274,6 +332,22 @@ impl<A, Tag> DifferentiableTagged<A, Tag> {
     {
         DifferentiableTagged {
             contents: self.contents.map2(&other.contents, f),
+        }
+    }
+
+    pub fn map2_once_tagged<B, C, Tag2, Tag3, F>(
+        self: &DifferentiableTagged<A, Tag>,
+        other: &DifferentiableTagged<B, Tag2>,
+        f: F,
+    ) -> DifferentiableTagged<C, Tag3>
+    where
+        F: FnMut(
+            &DifferentiableTagged<A, Tag>,
+            &DifferentiableTagged<B, Tag2>,
+        ) -> DifferentiableTagged<C, Tag3>,
+    {
+        DifferentiableTagged {
+            contents: self.contents.map2_once_tagged(&other.contents, f),
         }
     }
 
@@ -582,10 +656,10 @@ impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
         }
     }
 
-    pub fn map2_tagged<B, C, Tag2, Tag3, F>(
-        self: &RankedDifferentiableTagged<A, Tag, RANK>,
-        other: &RankedDifferentiableTagged<B, Tag2, RANK>,
-        f: &mut F,
+    pub fn map2_tagged<'a, 'b, B, C, Tag2, Tag3, F>(
+        self: &'a RankedDifferentiableTagged<A, Tag, RANK>,
+        other: &'a RankedDifferentiableTagged<B, Tag2, RANK>,
+        f: &'b mut F,
     ) -> RankedDifferentiableTagged<C, Tag3, RANK>
     where
         F: FnMut(&Scalar<A>, Tag, &Scalar<B>, Tag2) -> (Scalar<C>, Tag3),
@@ -596,6 +670,44 @@ impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
     {
         RankedDifferentiableTagged {
             contents: DifferentiableTagged::map2_tagged(&self.contents, &other.contents, f),
+        }
+    }
+    pub fn map2_once_tagged<
+        'a,
+        'c,
+        B,
+        C: 'a,
+        Tag2,
+        Tag3: 'a,
+        F,
+        const RANK_B: usize,
+        const RANK_OUT: usize,
+    >(
+        self: &'a RankedDifferentiableTagged<A, Tag, RANK>,
+        other: &'a RankedDifferentiableTagged<B, Tag2, RANK_B>,
+        f: &'c mut F,
+    ) -> RankedDifferentiableTagged<C, Tag3, RANK_OUT>
+    where
+        F: FnMut(
+            &RankedDifferentiableTagged<A, Tag, { RANK - 1 }>,
+            &RankedDifferentiableTagged<B, Tag2, { RANK_B - 1 }>,
+        ) -> RankedDifferentiableTagged<C, Tag3, { RANK_OUT - 1 }>,
+        A: Clone,
+        B: Clone,
+        Tag: Clone,
+        Tag2: Clone,
+        'c: 'a,
+    {
+        RankedDifferentiableTagged {
+            contents: DifferentiableTagged::map2_once_tagged(
+                &self.contents,
+                &other.contents,
+                &mut |a: &DifferentiableTagged<A, Tag>, b: &DifferentiableTagged<B, Tag2>| {
+                    let a = (*a).clone().attach_rank::<{ RANK - 1 }>().unwrap();
+                    let b = (*b).clone().attach_rank::<{ RANK_B - 1 }>().unwrap();
+                    f(&a, &b).to_unranked()
+                },
+            ),
         }
     }
 
@@ -633,6 +745,22 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
         B: Clone,
     {
         self.map2_tagged(other, &mut |a, (), b, ()| (f(a, b), ()))
+    }
+
+    pub fn map2_once<B, C, F, const RANK_B: usize, const RANK_OUT: usize>(
+        self: &RankedDifferentiable<A, RANK>,
+        other: &RankedDifferentiable<B, RANK_B>,
+        f: &mut F,
+    ) -> RankedDifferentiable<C, RANK_OUT>
+    where
+        F: FnMut(
+            &RankedDifferentiable<A, { RANK - 1 }>,
+            &RankedDifferentiable<B, { RANK_B - 1 }>,
+        ) -> RankedDifferentiable<C, { RANK_OUT - 1 }>,
+        A: Clone,
+        B: Clone,
+    {
+        self.map2_once_tagged(other, f)
     }
 }
 

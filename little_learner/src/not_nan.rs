@@ -7,6 +7,10 @@ where
     xs.map(|x| NotNan::new(x).expect("not nan"))
 }
 
+pub fn from_not_nan_1<T, const N: usize>(xs: [NotNan<T>; N]) -> [T; N] {
+    xs.map(|x| x.into_inner())
+}
+
 pub fn to_not_nan_2<T, const N: usize, const M: usize>(xs: [[T; N]; M]) -> [[NotNan<T>; N]; M]
 where
     T: ordered_float::Float,
