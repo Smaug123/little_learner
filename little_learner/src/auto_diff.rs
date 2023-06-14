@@ -559,6 +559,37 @@ pub struct RankedDifferentiableTagged<A, Tag, const RANK: usize> {
     contents: DifferentiableTagged<A, Tag>,
 }
 
+impl<A, Tag, const RANK: usize> RankedDifferentiableTagged<A, Tag, RANK> {
+    pub fn map_once_tagged<B, Tag2, F, const RANK2: usize>(
+        &self,
+        f: &mut F,
+    ) -> DifferentiableTagged<B, Tag2>
+    where
+        A: Clone,
+        Tag: Clone,
+        B: Clone,
+        Tag2: Clone,
+        F: FnMut(&RankedDifferentiableTagged<A, Tag, RANK2>) -> DifferentiableTagged<B, Tag2>,
+    {
+        match &self.contents.contents {
+            DifferentiableContents::Scalar(_, _) => {
+                panic!("forbidden by the types")
+            }
+            DifferentiableContents::Vector(v, rank) => {
+                assert_eq!(*rank, RANK2);
+                DifferentiableTagged {
+                    contents: DifferentiableContents::Vector(
+                        v.iter()
+                            .map(|x| f(&(*x).clone().attach_rank::<RANK2>().unwrap()))
+                            .collect(),
+                        RANK2 - 1,
+                    ),
+                }
+            }
+        }
+    }
+}
+
 impl<A, Tag, const RANK: usize> Display for RankedDifferentiableTagged<A, Tag, RANK>
 where
     A: Display,
