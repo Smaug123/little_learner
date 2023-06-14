@@ -22,6 +22,7 @@ mod tests {
     use crate::not_nan::to_not_nan_2;
     use crate::scalar::Scalar;
     use crate::traits::Zero;
+    use ordered_float::NotNan;
 
     fn zeros_redefined<A>(t: &Differentiable<A>) -> Differentiable<A>
     where
@@ -56,5 +57,77 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(to_zeros, [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+    }
+
+    fn flatten_2<A>(t: RankedDifferentiable<A, 2>) -> RankedDifferentiable<A, 1>
+    where
+        A: Clone,
+    {
+        let mut result = Vec::new();
+        for v in t.to_unranked_borrow().borrow_vector() {
+            result.extend((*v.borrow_vector()).clone())
+        }
+        Differentiable::of_vec(result).attach_rank::<1>().unwrap()
+    }
+
+    #[test]
+    fn test_flatten_2() {
+        let input = RankedDifferentiable::of_slice_2::<_, 2>(&to_not_nan_2([
+            [1.0, 0.5],
+            [3.1, 2.2],
+            [7.3, 2.1],
+        ]));
+        let flattened = flatten_2(input);
+        let reshaped = flattened
+            .to_vector()
+            .iter()
+            .map(|x| (*x).clone().to_scalar().clone_real_part().into_inner())
+            .collect::<Vec<_>>();
+        assert_eq!(reshaped, [1.0, 0.5, 3.1, 2.2, 7.3, 2.1])
+    }
+
+    #[test]
+    fn test_flatten() {
+        let flatten = |t: &Differentiable<NotNan<f64>>| {
+            ext1(
+                2,
+                &mut |t| flatten_2((*t).clone().attach_rank::<2>().unwrap()).to_unranked(),
+                t,
+            )
+        };
+        let input = RankedDifferentiable::of_vector(vec![
+            RankedDifferentiable::of_slice_2::<_, 2>(&to_not_nan_2([
+                [1.0, 0.5],
+                [3.1, 2.2],
+                [7.3, 2.1],
+            ])),
+            RankedDifferentiable::of_slice_2::<_, 2>(&to_not_nan_2([
+                [2.9, 3.5],
+                [0.7, 1.5],
+                [2.5, 6.4],
+            ])),
+        ]);
+
+        let flattened = flatten(&input.to_unranked())
+            .attach_rank::<2>()
+            .unwrap()
+            .to_vector()
+            .iter()
+            .map(|i| {
+                i.to_unranked_borrow()
+                    .borrow_vector()
+                    .iter()
+                    .map(|j| j.borrow_scalar().clone_real_part().into_inner())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            flattened,
+            [
+                [1.0, 0.5, 3.1, 2.2, 7.3, 2.1],
+                [2.9, 3.5, 0.7, 1.5, 2.5, 6.4]
+            ]
+        )
     }
 }
