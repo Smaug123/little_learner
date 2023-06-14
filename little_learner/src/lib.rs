@@ -6,6 +6,7 @@ pub mod auto_diff;
 pub mod decider;
 pub mod gradient_descent;
 pub mod hyper;
+pub mod layer;
 pub mod loss;
 pub mod not_nan;
 pub mod predictor;

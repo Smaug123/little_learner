@@ -15,19 +15,19 @@ where
 }
 
 fn linear<A, Tag1, Tag2>(
-    t: RankedDifferentiableTagged<A, Tag1, 1>,
-    theta0: RankedDifferentiableTagged<A, Tag2, 1>,
+    t: &RankedDifferentiableTagged<A, Tag1, 1>,
+    theta0: &RankedDifferentiableTagged<A, Tag2, 1>,
     theta1: Scalar<A>,
 ) -> Scalar<A>
 where
     A: NumLike,
 {
-    dot(&theta0, &t) + theta1
+    dot(theta0, t) + theta1
 }
 
 pub fn relu<A, Tag1, Tag2>(
-    t: RankedDifferentiableTagged<A, Tag1, 1>,
-    theta0: RankedDifferentiableTagged<A, Tag2, 1>,
+    t: &RankedDifferentiableTagged<A, Tag1, 1>,
+    theta0: &RankedDifferentiableTagged<A, Tag2, 1>,
     theta1: Scalar<A>,
 ) -> Scalar<A>
 where
@@ -50,7 +50,7 @@ mod test_decider {
         let theta1 = Scalar::make(NotNan::new(0.6).expect("not nan"));
         let t = RankedDifferentiable::of_slice(&to_not_nan_1([2.0, 1.0, 3.0]));
 
-        let result = linear(t, theta0, theta1).real_part().into_inner();
+        let result = linear(&t, &theta0, theta1).real_part().into_inner();
 
         assert!((result + 0.1).abs() < 0.000_000_01);
     }
@@ -61,7 +61,7 @@ mod test_decider {
         let theta1 = Scalar::make(NotNan::new(0.6).expect("not nan"));
         let t = RankedDifferentiable::of_slice(&to_not_nan_1([2.0, 1.0, 3.0]));
 
-        let result = relu(t, theta0, theta1).real_part().into_inner();
+        let result = relu(&t, &theta0, theta1).real_part().into_inner();
 
         assert_eq!(result, 0.0);
     }
