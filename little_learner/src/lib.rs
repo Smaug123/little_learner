@@ -3,6 +3,7 @@
 #![feature(array_methods)]
 
 pub mod auto_diff;
+pub mod block;
 pub mod decider;
 pub mod ext;
 pub mod gradient_descent;
