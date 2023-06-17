@@ -56,3 +56,22 @@ pub fn import() -> Vec<Iris> {
 
     output
 }
+
+pub(crate) const EXPECTED_FIRST: Iris = Iris {
+    class: IrisType::Setosa,
+    petal_length: 5.1,
+    petal_width: 3.5,
+    sepal_length: 1.4,
+    sepal_width: 0.2,
+};
+
+#[cfg(test)]
+mod test {
+    use crate::iris::{import};
+
+    #[test]
+    fn first_element() {
+        let irises = import();
+        assert_eq!(irises[0], crate::iris::EXPECTED_FIRST);
+    }
+}
