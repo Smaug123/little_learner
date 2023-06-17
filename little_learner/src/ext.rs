@@ -430,7 +430,7 @@ mod tests {
                 crate::decider::relu(
                     &t,
                     &RankedDifferentiable::of_slice(weights),
-                    Scalar::make(bias.clone()),
+                    Scalar::make(*bias),
                 )
                 .clone_real_part()
                 .into_inner(),

@@ -404,8 +404,11 @@ mod tests {
             .map(|x| x.into_inner())
             .collect::<Vec<_>>();
         let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
-        assert_eq!(fitted_theta0, [3.9746454441720851, 1.9714549220774951]);
-        assert_eq!(fitted_theta1, 6.1645790482740361);
+        assert_eq!(
+            fitted_theta0,
+            [3.974_645_444_172_085, 1.971_454_922_077_495]
+        );
+        assert_eq!(fitted_theta1, 6.164_579_048_274_036);
     }
 
     #[test]
@@ -452,7 +455,7 @@ mod tests {
         let fitted_theta1 = theta1.to_scalar().real_part().into_inner();
         assert_eq!(
             fitted_theta0,
-            [3.980_262_420_345_729_5, 1.977_071_898_301_443_9]
+            [3.980_262_420_345_729_5, 1.977_071_898_301_444]
         );
         assert_eq!(fitted_theta1, 6.170_196_024_282_712_5);
     }
