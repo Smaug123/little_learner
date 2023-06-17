@@ -182,7 +182,7 @@ where
         theta1.to_unranked_borrow(),
         t.to_unranked_borrow(),
     )
-    .map(&mut |x| rectify(x))
+    .map(&mut rectify)
 }
 
 #[cfg(test)]
