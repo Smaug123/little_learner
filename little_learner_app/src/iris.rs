@@ -67,7 +67,7 @@ pub(crate) const EXPECTED_FIRST: Iris = Iris {
 
 #[cfg(test)]
 mod test {
-    use crate::iris::{import};
+    use crate::iris::import;
 
     #[test]
     fn first_element() {

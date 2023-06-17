@@ -1,7 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-
 use crate::rms_example::rms_example;
 
 mod iris;
