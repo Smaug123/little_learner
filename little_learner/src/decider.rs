@@ -3,7 +3,7 @@ use crate::loss::dot;
 use crate::scalar::Scalar;
 use crate::traits::{NumLike, Zero};
 
-fn rectify<A>(x: A) -> A
+pub(crate) fn rectify<A>(x: A) -> A
 where
     A: Zero + PartialOrd,
 {

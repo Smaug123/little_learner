@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::auto_diff::{Differentiable, RankedDifferentiableTagged};
+use crate::ext::{sum, sum_1};
 use crate::{
     auto_diff::{DifferentiableTagged, RankedDifferentiable},
     scalar::Scalar,
@@ -76,16 +77,6 @@ where
     RankedDifferentiable::map2(x, x, &mut |x, y| x.clone() * y.clone())
 }
 
-fn sum_2<A>(x: RankedDifferentiable<A, 1>) -> Scalar<A>
-where
-    A: Sum<A> + Clone + Add<Output = A> + Zero,
-{
-    RankedDifferentiable::to_vector(x)
-        .into_iter()
-        .map(|x| x.to_scalar())
-        .sum()
-}
-
 fn l2_norm_2<A>(
     prediction: &RankedDifferentiable<A, 1>,
     data: &RankedDifferentiable<A, 1>,
@@ -94,7 +85,7 @@ where
     A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero + Neg,
 {
     let diff = RankedDifferentiable::map2(prediction, data, &mut |x, y| x.clone() - y.clone());
-    sum_2(squared_2(&diff))
+    sum_1(squared_2(&diff)).into_scalar()
 }
 
 pub fn l2_loss_2<A, F, Params, const N: usize>(
@@ -249,12 +240,16 @@ where
             .map(|v| RankedDifferentiable::of_scalar(v.borrow_scalar().clone()))
             .collect::<Vec<_>>(),
     );
-    let theta1 = theta[1].borrow_scalar().clone();
+    let theta1 = theta[1].clone().attach_rank::<0>().unwrap();
     let dotted: Vec<_> = xs
         .to_vector()
         .into_iter()
-        .map(|point| sum_2(elementwise_mul(&theta0, &point)))
-        .map(|x| RankedDifferentiable::of_scalar(x + theta1.clone()))
+        .map(|point| {
+            sum(elementwise_mul(&theta0, &point).to_unranked_borrow())
+                .attach_rank::<0>()
+                .unwrap()
+        })
+        .map(|x| x.map2(&theta1, &mut |x, theta| x.clone() + theta.clone()))
         .collect();
     RankedDifferentiable::of_vector(dotted)
 }
