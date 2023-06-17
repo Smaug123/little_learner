@@ -250,12 +250,12 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
             }
             (
                 DifferentiableContents::Vector(v1, rank1),
-                DifferentiableContents::Vector(v2, _rank2),
+                DifferentiableContents::Vector(v2, rank2),
             ) => {
                 assert_eq!(
                     v1.len(),
                     v2.len(),
-                    "Must map two vectors of the same length, got {rank1} and {_rank2}"
+                    "Must map two vectors of the same length, got {rank1} and {rank2}"
                 );
                 assert_ne!(
                     v1.len(),

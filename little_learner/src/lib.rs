@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(array_methods)]
+#![feature(closure_lifetime_binder)]
 
 pub mod auto_diff;
 pub mod block;

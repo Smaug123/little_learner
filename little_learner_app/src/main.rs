@@ -3,6 +3,8 @@
 
 use crate::rms_example::rms_example;
 use little_learner::auto_diff::RankedDifferentiable;
+use little_learner::block;
+use ordered_float::NotNan;
 
 mod iris;
 mod rms_example;
@@ -20,4 +22,6 @@ fn main() {
     }
     let _xs = RankedDifferentiable::of_vector(xs);
     let _ys = RankedDifferentiable::of_vector(ys);
+
+    let _network = block::compose(block::dense::<NotNan<f64>, ()>(6, 3), block::dense(4, 6), 2);
 }
