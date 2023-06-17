@@ -31,6 +31,7 @@ where
     }
 }
 
+#[must_use]
 pub fn dense<'b, A, Tag>(
     input_len: usize,
     neuron_count: usize,
