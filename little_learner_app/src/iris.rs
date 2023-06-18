@@ -1,5 +1,7 @@
 use csv::ReaderBuilder;
 use little_learner::traits::{One, Zero};
+use rand::Rng;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::str::FromStr;
@@ -64,25 +66,35 @@ where
 }
 
 /// Returns the training xs, training ys, test xs, and test ys.
-pub fn partition<A>(irises: &[Iris<A>]) -> (Vec<[A; 4]>, Vec<[A; 3]>, Vec<[A; 4]>, Vec<[A; 3]>)
+pub fn partition<A, R>(
+    rng: &mut R,
+    irises: &[Iris<A>],
+) -> (Vec<[A; 4]>, Vec<[A; 3]>, Vec<[A; 4]>, Vec<[A; 3]>)
 where
     A: Clone + One + Zero + Copy,
+    R: Rng,
 {
-    let training_cutoff = (irises.len() * 9) / 10;
-    let mut training_xs = Vec::with_capacity(training_cutoff);
-    let mut training_ys = Vec::with_capacity(training_cutoff);
-    for iris in &irises[0..training_cutoff] {
-        let (x, y) = iris.one_hot();
-        training_xs.push(x);
-        training_ys.push(y);
+    let training_cutoff = irises.len() / 10;
+    let mut selected_indices = HashSet::with_capacity(training_cutoff);
+    while selected_indices.len() < training_cutoff {
+        let sample = rng.gen_range(0..irises.len());
+        selected_indices.insert(sample);
     }
 
+    let mut training_xs = Vec::with_capacity(training_cutoff);
+    let mut training_ys = Vec::with_capacity(training_cutoff);
     let mut test_xs = Vec::with_capacity(irises.len() - training_cutoff);
     let mut test_ys = Vec::with_capacity(irises.len() - training_cutoff);
-    for iris in &irises[training_cutoff..] {
+
+    for (i, iris) in irises.iter().enumerate() {
         let (x, y) = iris.one_hot();
-        test_xs.push(x);
-        test_ys.push(y);
+        if selected_indices.contains(&i) {
+            test_xs.push(x);
+            test_ys.push(y);
+        } else {
+            training_xs.push(x);
+            training_ys.push(y);
+        }
     }
 
     (training_xs, training_ys, test_xs, test_ys)

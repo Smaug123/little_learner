@@ -56,13 +56,15 @@ fn main() {
         .iter()
         .map(|x| x.map(|z| NotNan::new(z).unwrap()))
         .collect::<Vec<_>>();
-    let (training_xs, training_ys, test_xs, test_ys) = iris::partition(&irises);
+
+    let mut rng = thread_rng();
+
+    let (training_xs, training_ys, test_xs, test_ys) = iris::partition(&mut rng, &irises);
     let mut network = block::compose_mut(
         block::dense_mut::<NotNan<f64>, ()>(6, 3),
         block::dense_mut(4, 6),
         2,
     );
-    let mut rng = thread_rng();
     let second_layer_weights = block::dense_initial_weights::<f64, _>(&mut rng, 6, 3);
     let first_layer_weights = block::dense_initial_weights::<f64, _>(&mut rng, 4, 6);
     let second_layer_biases = block::dense_initial_biases::<NotNan<f64>>(3);
@@ -99,15 +101,30 @@ fn main() {
         hyper::NakedGradientDescent::to_immutable,
     );
 
+    println!("First layer weights: {}", &params[0]);
+    println!("First layer biases: {}", &params[1]);
+    println!("Second layer weights: {}", &params[2]);
+    println!("Second layer biases: {}", &params[3]);
+
+    let mut good_count = 0;
+    let mut bad_count = 0;
     for (test_x, expected) in test_xs.iter().zip(test_ys.iter()) {
         let actual = (predictor.predict)(&to_diff(&[test_x.clone()]), &params);
+        println!("Test: {:?}. Actual: {}", test_x, actual);
         // We made a single prediction so this is safe:
         let actual = &actual.to_vector()[0];
         let expected = &to_diff_out(&[expected.clone()]).to_vector()[0];
         if !one_hot_class_eq(expected, actual) {
-            println!("Bad prediction!")
+            println!("Bad prediction! Actual: {}; expected: {}", actual, expected);
+            bad_count += 1;
         } else {
-            println!("Good prediction!")
+            good_count += 1;
+            println!(
+                "Good prediction! Actual: {}; expected: {}",
+                actual, expected
+            )
         }
     }
+
+    println!("Bad: {}; good: {}", bad_count, good_count);
 }

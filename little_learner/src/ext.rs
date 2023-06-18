@@ -98,6 +98,30 @@ where
     .unwrap()
 }
 
+pub fn star_1_1<T, Tag, Tag2>(
+    x: &DifferentiableTagged<T, Tag>,
+    y: &DifferentiableTagged<T, Tag2>,
+) -> Differentiable<T>
+where
+    T: Clone + Sum + Mul<Output = T> + Default,
+    Tag: Clone,
+    Tag2: Clone,
+{
+    ext2(
+        1,
+        1,
+        &mut |x, y| {
+            elementwise_mul_via_ext(
+                &x.clone().attach_rank::<1>().unwrap(),
+                &y.clone().attach_rank::<1>().unwrap(),
+            )
+            .to_unranked()
+        },
+        x,
+        y,
+    )
+}
+
 /// Produce the element-wise multiplication of the inputs, threading where necessary until the
 /// first argument has rank 2 and the second argument has rank 1.
 /// This is essentially "matrix-multiply a matrix by a vector, but don't do the sum; instead
@@ -111,19 +135,7 @@ where
     Tag: Clone,
     Tag2: Clone,
 {
-    ext2(
-        2,
-        1,
-        &mut |x, y| {
-            elementwise_mul_via_ext(
-                &x.clone().attach_rank::<2>().unwrap(),
-                &y.clone().attach_rank::<1>().unwrap(),
-            )
-            .to_unranked()
-        },
-        x,
-        y,
-    )
+    ext2(2, 1, &mut star_1_1, x, y)
 }
 
 fn sum_1_scalar<A, Tag>(x: RankedDifferentiableTagged<A, Tag, 1>) -> Scalar<A>

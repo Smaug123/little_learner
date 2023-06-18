@@ -95,12 +95,12 @@ where
     Standard: Distribution<A>,
 {
     let mut rows = Vec::with_capacity(neuron_count);
-    // Variance of 2/n, mean of 0, suggests uniform distribution on [-sqrt(6/n), sqrt(6/n)].
-    // The Rust standard distribution on floats is uniform between 0 and 0.5.
+    // Need a variance of 2/n, mean of 0, so want a uniform distribution on [-sqrt(6/n), sqrt(6/n)].
+    // The Rust standard distribution on floats is uniform between 0 and 1.
     let n = A::from(neuron_count).unwrap();
-    let four = A::from(4).unwrap();
+    let two = A::from(2).unwrap();
     let six = A::from(6).unwrap();
-    let dist = Standard.map(|x| ((four * x) - A::one()) * (six * n.recip()).sqrt());
+    let dist = Standard.map(|x| ((two * x) - A::one()) * (six * n.recip()).sqrt());
 
     for _ in 0..neuron_count {
         let mut row = Vec::with_capacity(input_len);
