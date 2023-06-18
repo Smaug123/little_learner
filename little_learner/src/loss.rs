@@ -68,7 +68,7 @@ where
         .sum()
 }
 
-fn squared_2<A, const RANK: usize>(
+pub(crate) fn squared_2<A, const RANK: usize>(
     x: &RankedDifferentiable<A, RANK>,
 ) -> RankedDifferentiable<A, RANK>
 where
@@ -109,7 +109,9 @@ pub fn predict_line_2<A>(
 where
     A: Mul<Output = A> + Add<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + One + Zero,
 {
-    let xs = xs.to_unranked_borrow().borrow_vector()
+    let xs = xs
+        .to_unranked_borrow()
+        .borrow_vector()
         .into_iter()
         .map(|v| v.borrow_scalar());
     let mut result = vec![];
@@ -133,15 +135,17 @@ where
 }
 
 pub fn predict_line_2_unranked<A>(
-    xs: RankedDifferentiable<A, 1>,
+    xs: &RankedDifferentiable<A, 1>,
     theta: &[Differentiable<A>; 2],
 ) -> RankedDifferentiable<A, 1>
 where
     A: Mul<Output = A> + Add<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + One + Zero,
 {
-    let xs = RankedDifferentiable::to_vector(xs)
+    let xs = xs
+        .to_unranked_borrow()
+        .borrow_vector()
         .into_iter()
-        .map(|v| v.to_scalar());
+        .map(|v| v.borrow_scalar());
     let mut result = vec![];
     for x in xs {
         let left_arg = RankedDifferentiable::of_vector(vec![
@@ -245,9 +249,12 @@ where
         .borrow_vector()
         .into_iter()
         .map(|point| {
-            sum(elementwise_mul(&theta0, &point.clone().attach_rank::<1>().unwrap()).to_unranked_borrow())
-                .attach_rank::<0>()
-                .unwrap()
+            sum(
+                elementwise_mul(&theta0, &point.clone().attach_rank::<1>().unwrap())
+                    .to_unranked_borrow(),
+            )
+            .attach_rank::<0>()
+            .unwrap()
         })
         .map(|x| x.map2(&theta1, &mut |x, theta| x.clone() + theta.clone()))
         .collect();
@@ -266,7 +273,7 @@ mod test_loss {
         let xs = [2.0, 1.0, 4.0, 3.0];
         let ys = [1.8, 1.2, 4.2, 3.3];
         let loss = l2_loss_2(
-            &mut |x, y| { predict_line_2(&x.attach_rank::<1>().unwrap(), y) },
+            &mut |x, y| predict_line_2(&x.attach_rank::<1>().unwrap(), y),
             RankedDifferentiable::of_slice(&xs).to_unranked_borrow(),
             RankedDifferentiable::of_slice(&ys),
             [

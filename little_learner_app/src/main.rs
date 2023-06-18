@@ -22,7 +22,8 @@ where
         x.iter()
             .map(|x| {
                 Differentiable::of_vec(
-                    x.iter().map(|i| Differentiable::of_scalar(Scalar::make(i.clone())))
+                    x.iter()
+                        .map(|i| Differentiable::of_scalar(Scalar::make(i.clone())))
                         .collect::<Vec<_>>(),
                 )
             })
@@ -30,21 +31,29 @@ where
     )
 }
 
-fn to_diff_out<A, const N: usize>(x: &[[A; N]]) -> RankedDifferentiable<A, 1>
-    where
-        A: Clone,
+fn to_diff_out<A, const N: usize>(x: &[[A; N]]) -> RankedDifferentiable<A, 2>
+where
+    A: Clone,
 {
-    todo!()
+    RankedDifferentiable::of_vector(
+        x.iter()
+            .map(|x| {
+                RankedDifferentiable::of_vector(
+                    x.iter()
+                        .map(|i| RankedDifferentiable::of_scalar(Scalar::make(i.clone())))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn main() {
-    //rms_example();
-
     let irises = iris::import::<f64, _>()
         .iter()
         .map(|x| x.map(|z| NotNan::new(z).unwrap()))
         .collect::<Vec<_>>();
-    let (training_xs, training_ys, test_xs, test_ys) = iris::partition(&irises);
+    let (training_xs, training_ys, _test_xs, _test_ys) = iris::partition(&irises);
     let mut network = block::compose_mut(
         block::dense_mut::<NotNan<f64>, ()>(6, 3),
         block::dense_mut(4, 6),
@@ -53,8 +62,8 @@ fn main() {
     let mut rng = thread_rng();
     let second_layer_weights = block::dense_initial_weights::<f64, _>(&mut rng, 6, 3);
     let first_layer_weights = block::dense_initial_weights::<f64, _>(&mut rng, 4, 6);
-    let second_layer_biases = block::dense_initial_biases::<NotNan<f64>>(6);
-    let first_layer_biases = block::dense_initial_biases::<NotNan<f64>>(4);
+    let second_layer_biases = block::dense_initial_biases::<NotNan<f64>>(3);
+    let first_layer_biases = block::dense_initial_biases::<NotNan<f64>>(6);
 
     let all_weights = [
         first_layer_weights,
@@ -68,8 +77,8 @@ fn main() {
 
     let predictor = naked(
         for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
-                 y: &'b [Differentiable<NotNan<f64>>; 4]|
-                 -> RankedDifferentiable<NotNan<f64>, 1> {
+                     y: &'b [Differentiable<NotNan<f64>>; 4]|
+                     -> RankedDifferentiable<NotNan<f64>, 2> {
             let x = x.clone();
             let y = y.clone();
             (network.f)(&x, &y).attach_rank().unwrap()
@@ -86,4 +95,6 @@ fn main() {
         predictor,
         hyper::NakedGradientDescent::to_immutable,
     );
+
+    rms_example();
 }

@@ -1,6 +1,6 @@
 use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
+use crate::ext::l2_loss;
 use crate::hyper;
-use crate::loss::l2_loss_2;
 use crate::predictor::Predictor;
 use crate::sample;
 use crate::traits::NumLike;
@@ -19,16 +19,7 @@ where
 }
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
-fn general_gradient_descent_step<
-    A,
-    F,
-    Inflated,
-    Deflate,
-    Adjust,
-    Hyper,
-    const RANK: usize,
-    const PARAM_NUM: usize,
->(
+fn general_gradient_descent_step<A, F, Inflated, Deflate, Adjust, Hyper, const PARAM_NUM: usize>(
     f: &mut F,
     theta: [Inflated; PARAM_NUM],
     deflate: Deflate,
@@ -37,7 +28,7 @@ fn general_gradient_descent_step<
 ) -> [Inflated; PARAM_NUM]
 where
     A: Clone + NumLike + Hash + Eq,
-    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
+    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> Differentiable<A>,
     Deflate: FnMut(Inflated) -> Differentiable<A>,
     Inflated: Clone,
     Hyper: Clone,
@@ -67,6 +58,7 @@ pub fn gradient_descent<
     Hyper,
     ImmutableHyper,
     const PARAM_NUM: usize,
+    const OUT_RANK: usize,
 >(
     hyper: Hyper,
     xs: &'a [Point],
@@ -84,9 +76,9 @@ where
     F: FnMut(
         &Differentiable<T>,
         &[Differentiable<T>; PARAM_NUM],
-    ) -> RankedDifferentiable<T, 1>,
+    ) -> RankedDifferentiable<T, OUT_RANK>,
     G: for<'b> FnMut(&'b [Point]) -> Differentiable<T>,
-    I: for<'b> FnMut(&'b [OutPoint]) -> RankedDifferentiable<T, 1>,
+    I: for<'b> FnMut(&'b [OutPoint]) -> RankedDifferentiable<T, OUT_RANK>,
     Inflated: Clone,
     ImmutableHyper: Clone,
     Hyper: Into<hyper::BaseGradientDescent<R>>,
@@ -100,24 +92,20 @@ where
         |theta| {
             general_gradient_descent_step(
                 &mut |x| match gradient_hyper.sampling.as_mut() {
-                    None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                        l2_loss_2(
-                            &mut predictor.predict,
-                            &to_differentiable(xs),
-                            to_ranked_differentiable_out(ys),
-                            x,
-                        ),
-                    )]),
+                    None => l2_loss(
+                        &mut predictor.predict,
+                        &to_differentiable(xs),
+                        to_ranked_differentiable_out(ys),
+                        x,
+                    ),
                     Some((rng, batch_size)) => {
                         let (sampled_xs, sampled_ys) = sample::take_2(rng, *batch_size, xs, ys);
-                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                            l2_loss_2(
-                                &mut predictor.predict,
-                                &to_differentiable(&sampled_xs),
-                                to_ranked_differentiable_out(&sampled_ys),
-                                x,
-                            ),
-                        )])
+                        l2_loss(
+                            &mut predictor.predict,
+                            &to_differentiable(&sampled_xs),
+                            to_ranked_differentiable_out(&sampled_ys),
+                            x,
+                        )
                     }
                 },
                 theta,

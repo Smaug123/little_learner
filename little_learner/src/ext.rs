@@ -2,10 +2,12 @@ use crate::auto_diff::{
     Differentiable, DifferentiableTagged, RankedDifferentiable, RankedDifferentiableTagged,
 };
 use crate::decider::rectify;
+use crate::loss::squared_2;
 use crate::scalar::Scalar;
 use crate::traits::{NumLike, Zero};
+use std::fmt::Display;
 use std::iter::Sum;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Neg};
 
 pub fn ext1<A, B, Tag, Tag2, F>(
     n: usize,
@@ -52,6 +54,26 @@ where
     } else {
         u.map_once_tagged(|eu| ext2(n, m, f, t, eu))
     }
+}
+
+pub fn plus<A, Tag, Tag2>(
+    x: &DifferentiableTagged<A, Tag>,
+    y: &DifferentiableTagged<A, Tag2>,
+) -> Differentiable<A>
+where
+    A: Clone + Add<Output = A>,
+    Tag: Clone,
+    Tag2: Clone,
+{
+    ext2(
+        0,
+        0,
+        &mut |x, y| {
+            Differentiable::of_scalar(x.borrow_scalar().clone() + y.borrow_scalar().clone())
+        },
+        x,
+        y,
+    )
 }
 
 pub fn elementwise_mul_via_ext<A, Tag, Tag2, const RANK1: usize, const RANK2: usize>(
@@ -158,12 +180,13 @@ pub fn linear<A, Tag1, Tag2, Tag3>(
     t: &DifferentiableTagged<A, Tag3>,
 ) -> DifferentiableTagged<A, ()>
 where
-    A: NumLike + Default,
+    A: NumLike + Default + Display,
     Tag1: Clone,
     Tag2: Clone,
     Tag3: Clone,
 {
-    dot_2_1(theta0, t).map2_tagged(theta1, &mut |x, _, y, _| (x.clone() + y.clone(), ()))
+    let dotted = dot_2_1(theta0, t);
+    plus(&dotted, theta1)
 }
 
 pub fn relu<A, Tag1, Tag2, Tag3>(
@@ -172,7 +195,7 @@ pub fn relu<A, Tag1, Tag2, Tag3>(
     theta1: &RankedDifferentiableTagged<A, Tag3, 1>,
 ) -> Differentiable<A>
 where
-    A: NumLike + PartialOrd + Default,
+    A: NumLike + PartialOrd + Default + Display,
     Tag1: Clone,
     Tag2: Clone,
     Tag3: Clone,
@@ -186,9 +209,9 @@ pub fn k_relu<A, Tag>(
 ) -> Differentiable<A>
 where
     Tag: Clone,
-    A: NumLike + PartialOrd + Default,
+    A: NumLike + PartialOrd + Default + std::fmt::Display,
 {
-    assert!(theta.len() < 2, "Needed at least 2 parameters for k_relu");
+    assert!(theta.len() >= 2, "Needed at least 2 parameters for k_relu");
     let once = relu(
         t,
         &theta[0].clone().attach_rank::<2>().unwrap(),
@@ -199,6 +222,31 @@ where
     } else {
         k_relu(&once, &theta[2..])
     }
+}
+
+pub fn l2_norm<A, const RANK: usize>(
+    prediction: &RankedDifferentiable<A, RANK>,
+    data: &RankedDifferentiable<A, RANK>,
+) -> Differentiable<A>
+where
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero + Neg,
+{
+    let diff = RankedDifferentiable::map2(prediction, data, &mut |x, y| x.clone() - y.clone());
+    sum(squared_2(&diff).to_unranked_borrow())
+}
+
+pub fn l2_loss<A, F, Params, const RANK: usize>(
+    target: &mut F,
+    data_xs: &Differentiable<A>,
+    data_ys: RankedDifferentiable<A, RANK>,
+    params: Params,
+) -> Differentiable<A>
+where
+    F: FnMut(&Differentiable<A>, Params) -> RankedDifferentiable<A, RANK>,
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero,
+{
+    let pred_ys = target(data_xs, params);
+    l2_norm(&pred_ys, &data_ys)
 }
 
 #[cfg(test)]

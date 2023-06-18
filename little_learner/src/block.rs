@@ -1,5 +1,5 @@
 use crate::auto_diff::{Differentiable, DifferentiableTagged};
-use crate::ext::{k_relu, relu};
+use crate::ext::k_relu;
 use crate::scalar::Scalar;
 use crate::traits::NumLike;
 use num::Float;
@@ -60,34 +60,6 @@ where
 }
 
 #[must_use]
-pub fn dense_once<'b, A, Tag>(
-    input_len: usize,
-    neuron_count: usize,
-) -> Block<
-    impl for<'a> FnOnce(&'a DifferentiableTagged<A, Tag>, &'b [Differentiable<A>]) -> Differentiable<A>,
-    2,
->
-where
-    Tag: Clone,
-    A: NumLike + PartialOrd + Default,
-{
-    Block {
-        f: Box::new(
-            for<'a> |t: &'a DifferentiableTagged<A, Tag>,
-                     theta: &'b [Differentiable<A>]|
-                     -> Differentiable<A> {
-                relu(
-                    t,
-                    &(theta[0].clone().attach_rank().unwrap()),
-                    &(theta[1].clone().attach_rank().unwrap()),
-                )
-            },
-        ),
-        ranks: [input_len, neuron_count],
-    }
-}
-
-#[must_use]
 pub fn dense_mut<A, Tag>(
     input_len: usize,
     neuron_count: usize,
@@ -100,13 +72,13 @@ pub fn dense_mut<A, Tag>(
 >
 where
     Tag: Clone,
-    A: NumLike + PartialOrd + Default,
+    A: NumLike + PartialOrd + Default + std::fmt::Display,
 {
     Block {
         f: Box::new(
             for<'a, 'b> |t: &'a DifferentiableTagged<A, Tag>,
                          theta: &'b [Differentiable<A>]|
-                         -> Differentiable<A> { k_relu(t, theta) },
+                         -> Differentiable<A> { k_relu(t, &theta[0..2]) },
         ),
         ranks: [input_len, neuron_count],
     }

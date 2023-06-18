@@ -349,7 +349,7 @@ where
         match self {
             Scalar::Number(n, Some(index)) => f.write_fmt(format_args!("{n}_{index}")),
             Scalar::Number(n, None) => f.write_fmt(format_args!("{n}")),
-            Scalar::Dual(n, link) => f.write_fmt(format_args!("<{n}, link: {link}>")),
+            Scalar::Dual(n, _link) => f.write_fmt(format_args!("{n}")),
         }
     }
 }
