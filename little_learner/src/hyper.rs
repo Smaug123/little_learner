@@ -263,3 +263,11 @@ impl<A, Rng> From<AdamGradientDescent<A, Rng>> for BaseGradientDescent<Rng> {
         val.base
     }
 }
+
+pub struct HyperAndFreeze<Hyper, ImmutableHyper, H>
+where
+    H: FnOnce(&Hyper) -> ImmutableHyper,
+{
+    pub to_immutable: H,
+    pub hyper: Hyper,
+}

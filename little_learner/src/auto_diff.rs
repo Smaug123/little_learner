@@ -255,7 +255,7 @@ impl<A, Tag> DifferentiableContents<A, Tag> {
                 assert_eq!(
                     v1.len(),
                     v2.len(),
-                    "Must map two vectors of the same length, got {rank1} and {rank2}"
+                    "Must map two vectors of the same length; ranks were: {rank1}, {rank2}",
                 );
                 assert_ne!(
                     v1.len(),
@@ -835,14 +835,12 @@ impl<A, const RANK: usize> RankedDifferentiable<A, RANK> {
     }
 }
 
-pub fn grad<A, Tag, F, const RANK: usize, const PARAM_RANK: usize>(
+pub fn grad<A, Tag, F, const PARAM_RANK: usize>(
     mut f: F,
     theta: &[DifferentiableTagged<A, Tag>; PARAM_RANK],
 ) -> [DifferentiableTagged<A, Tag>; PARAM_RANK]
 where
-    F: FnMut(
-        &[DifferentiableTagged<A, Tag>; PARAM_RANK],
-    ) -> RankedDifferentiableTagged<A, Tag, RANK>,
+    F: FnMut(&[DifferentiableTagged<A, Tag>; PARAM_RANK]) -> DifferentiableTagged<A, Tag>,
     A: ?Sized
         + Clone
         + Hash
@@ -867,7 +865,7 @@ where
         })
     });
     let after_f = f(&wrt);
-    DifferentiableContents::grad_once(after_f.contents.contents, wrt)
+    DifferentiableContents::grad_once(after_f.contents, wrt)
 }
 
 #[cfg(test)]
@@ -919,14 +917,12 @@ mod tests {
         let ys = [1.8, 1.2, 4.2, 3.3].map(|x| NotNan::new(x).expect("not nan"));
         let grad = grad(
             |x| {
-                RankedDifferentiableTagged::of_vector(vec![RankedDifferentiable::of_scalar(
-                    l2_loss_2(
-                        predict_line_2_unranked,
-                        RankedDifferentiableTagged::of_slice(xs.iter()),
-                        RankedDifferentiableTagged::of_slice(ys.iter()),
-                        x,
-                    ),
-                )])
+                Differentiable::of_scalar(l2_loss_2(
+                    &mut |x, y| predict_line_2_unranked(&x.clone().attach_rank().unwrap(), y),
+                    RankedDifferentiableTagged::of_slice(xs.iter()).to_unranked_borrow(),
+                    RankedDifferentiableTagged::of_slice(ys.iter()),
+                    x,
+                ))
             },
             &input_vec,
         );
@@ -948,6 +944,7 @@ mod tests {
                 RankedDifferentiableTagged::of_scalar(
                     x[0].borrow_scalar().clone() * x[0].borrow_scalar().clone(),
                 )
+                .to_unranked()
             },
             &input_vec,
         )
@@ -968,14 +965,12 @@ mod tests {
         let ys = to_not_nan_1([1.8, 1.2, 4.2, 3.3]);
         let grad = grad(
             |x| {
-                RankedDifferentiableTagged::of_vector(vec![RankedDifferentiableTagged::of_scalar(
-                    l2_loss_2(
-                        predict_line_2_unranked,
-                        RankedDifferentiableTagged::of_slice(&xs),
-                        RankedDifferentiableTagged::of_slice(&ys),
-                        x,
-                    ),
-                )])
+                Differentiable::of_scalar(l2_loss_2(
+                    &mut |x, y| predict_line_2_unranked(&x.clone().attach_rank().unwrap(), y),
+                    RankedDifferentiableTagged::of_slice(&xs).to_unranked_borrow(),
+                    RankedDifferentiableTagged::of_slice(&ys),
+                    x,
+                ))
             },
             &input_vec,
         );

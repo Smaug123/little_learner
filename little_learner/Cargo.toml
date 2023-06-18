@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 immutable-chunkmap = "1.0.5"
+num = "0.4.0"
 ordered-float = "3.6.0"
 rand = "0.8.5"
 

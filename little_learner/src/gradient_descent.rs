@@ -1,6 +1,7 @@
 use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
+use crate::ext::l2_loss;
 use crate::hyper;
-use crate::loss::l2_loss_2;
+use crate::hyper::HyperAndFreeze;
 use crate::predictor::Predictor;
 use crate::sample;
 use crate::traits::NumLike;
@@ -19,16 +20,7 @@ where
 }
 
 /// `adjust` takes the previous value and a delta, and returns a deflated new value.
-fn general_gradient_descent_step<
-    A,
-    F,
-    Inflated,
-    Deflate,
-    Adjust,
-    Hyper,
-    const RANK: usize,
-    const PARAM_NUM: usize,
->(
+fn general_gradient_descent_step<A, F, Inflated, Deflate, Adjust, Hyper, const PARAM_NUM: usize>(
     f: &mut F,
     theta: [Inflated; PARAM_NUM],
     deflate: Deflate,
@@ -37,7 +29,7 @@ fn general_gradient_descent_step<
 ) -> [Inflated; PARAM_NUM]
 where
     A: Clone + NumLike + Hash + Eq,
-    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> RankedDifferentiable<A, RANK>,
+    F: FnMut(&[Differentiable<A>; PARAM_NUM]) -> Differentiable<A>,
     Deflate: FnMut(Inflated) -> Differentiable<A>,
     Inflated: Clone,
     Hyper: Clone,
@@ -58,62 +50,62 @@ pub fn gradient_descent<
     T,
     R,
     Point,
+    OutPoint,
     F,
     G,
     H,
+    I,
     Inflated,
     Hyper,
     ImmutableHyper,
-    const IN_SIZE: usize,
     const PARAM_NUM: usize,
+    const OUT_RANK: usize,
 >(
-    hyper: Hyper,
+    hyper: HyperAndFreeze<Hyper, ImmutableHyper, H>,
     xs: &'a [Point],
-    to_ranked_differentiable: G,
-    ys: &[T],
+    to_differentiable: &mut G,
+    to_ranked_differentiable_out: &mut I,
+    ys: &[OutPoint],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
-    to_immutable: H,
+    predictor: &mut Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
     T: NumLike + Hash + Copy + Default,
     Point: 'a + Copy,
-    F: Fn(
-        RankedDifferentiable<T, IN_SIZE>,
+    OutPoint: Copy,
+    F: FnMut(
+        &Differentiable<T>,
         &[Differentiable<T>; PARAM_NUM],
-    ) -> RankedDifferentiable<T, 1>,
-    G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+    ) -> RankedDifferentiable<T, OUT_RANK>,
+    G: for<'b> FnMut(&'b [Point]) -> Differentiable<T>,
+    I: for<'b> FnMut(&'b [OutPoint]) -> RankedDifferentiable<T, OUT_RANK>,
     Inflated: Clone,
     ImmutableHyper: Clone,
     Hyper: Into<hyper::BaseGradientDescent<R>>,
     H: FnOnce(&Hyper) -> ImmutableHyper,
     R: Rng,
 {
-    let sub_hypers = to_immutable(&hyper);
-    let mut gradient_hyper: hyper::BaseGradientDescent<R> = hyper.into();
+    let sub_hypers = (hyper.to_immutable)(&hyper.hyper);
+    let mut gradient_hyper: hyper::BaseGradientDescent<R> = hyper.hyper.into();
     let iterations = gradient_hyper.iterations;
     let out = iterate(
         |theta| {
             general_gradient_descent_step(
                 &mut |x| match gradient_hyper.sampling.as_mut() {
-                    None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                        l2_loss_2(
-                            &predictor.predict,
-                            to_ranked_differentiable(xs),
-                            RankedDifferentiable::of_slice(ys),
-                            x,
-                        ),
-                    )]),
+                    None => l2_loss(
+                        &mut predictor.predict,
+                        &to_differentiable(xs),
+                        to_ranked_differentiable_out(ys),
+                        x,
+                    ),
                     Some((rng, batch_size)) => {
                         let (sampled_xs, sampled_ys) = sample::take_2(rng, *batch_size, xs, ys);
-                        RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
-                            l2_loss_2(
-                                &predictor.predict,
-                                to_ranked_differentiable(&sampled_xs),
-                                RankedDifferentiable::of_slice(&sampled_ys),
-                                x,
-                            ),
-                        )])
+                        l2_loss(
+                            &mut predictor.predict,
+                            &to_differentiable(&sampled_xs),
+                            to_ranked_differentiable_out(&sampled_ys),
+                            x,
+                        )
                     }
                 },
                 theta,
@@ -133,6 +125,10 @@ mod tests {
     use super::*;
     use crate::auto_diff::RankedDifferentiableTagged;
     use crate::hyper;
+    use crate::hyper::{
+        AdamGradientDescent, HyperAndFreeze, NakedGradientDescent, RmsGradientDescent,
+        VelocityGradientDescent,
+    };
     use crate::loss::{predict_line_2_unranked, predict_plane, predict_quadratic_unranked};
     use crate::not_nan::{to_not_nan_1, to_not_nan_2};
     use crate::predictor;
@@ -156,23 +152,30 @@ mod tests {
         let zero = Scalar::<NotNan<f64>>::zero();
 
         let hyper = hyper::NakedGradientDescent::new(NotNan::new(0.01).expect("not nan"), 1000);
-        let iterated = {
-            let xs = to_not_nan_1(xs);
-            let ys = to_not_nan_1(ys);
-            let zero_params = [
-                RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
-                RankedDifferentiable::of_scalar(zero).to_unranked(),
-            ];
-            gradient_descent(
-                hyper,
+        let iterated =
+            {
+                let xs = to_not_nan_1(xs);
+                let ys = to_not_nan_1(ys);
+                let zero_params = [
+                    RankedDifferentiable::of_scalar(zero.clone()).to_unranked(),
+                    RankedDifferentiable::of_scalar(zero).to_unranked(),
+                ];
+                gradient_descent(
+                HyperAndFreeze { hyper, to_immutable: NakedGradientDescent::to_immutable },
                 &xs,
-                |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_line_2_unranked),
-                hyper::NakedGradientDescent::to_immutable,
+                &mut predictor::naked(
+                    for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
+                                 y: &'b [Differentiable<NotNan<f64>>; 2]|
+                                 -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_line_2_unranked(&x.clone().attach_rank().unwrap(), y)
+                    },
+                ),
             )
-        };
+            };
         let iterated = iterated
             .into_iter()
             .map(|x| x.into_scalar().real_part().into_inner())
@@ -199,13 +202,22 @@ mod tests {
                 RankedDifferentiable::of_scalar(zero).to_unranked(),
             ];
             gradient_descent(
-                hyper,
+                HyperAndFreeze {
+                    hyper,
+                    to_immutable: NakedGradientDescent::to_immutable,
+                },
                 &xs,
-                |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_quadratic_unranked),
-                hyper::NakedGradientDescent::to_immutable,
+                &mut predictor::naked(
+                    |x: &Differentiable<NotNan<f64>>,
+                     y: &[Differentiable<NotNan<f64>>; 3]|
+                     -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_quadratic_unranked(x.clone().attach_rank().unwrap(), y)
+                    },
+                ),
             )
         };
         let iterated = iterated
@@ -233,23 +245,30 @@ mod tests {
     fn optimise_plane() {
         let hyper = hyper::NakedGradientDescent::new(NotNan::new(0.001).expect("not nan"), 1000);
 
-        let iterated = {
-            let xs = to_not_nan_2(PLANE_XS);
-            let ys = to_not_nan_1(PLANE_YS);
-            let zero_params = [
-                RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
-                Differentiable::of_scalar(Scalar::zero()),
-            ];
-            gradient_descent(
-                hyper,
+        let iterated =
+            {
+                let xs = to_not_nan_2(PLANE_XS);
+                let ys = to_not_nan_1(PLANE_YS);
+                let zero_params = [
+                    RankedDifferentiable::of_slice(&[NotNan::zero(), NotNan::zero()]).to_unranked(),
+                    Differentiable::of_scalar(Scalar::zero()),
+                ];
+                gradient_descent(
+                HyperAndFreeze { hyper, to_immutable: NakedGradientDescent::to_immutable },
                 &xs,
-                RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiable::of_slice_2::<_, 2>(x).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_plane),
-                hyper::NakedGradientDescent::to_immutable,
+                &mut predictor::naked(
+                    for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
+                                 y: &'b [Differentiable<NotNan<f64>>; 2]|
+                                 -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_plane(x, y)
+                    },
+                ),
             )
-        };
+            };
 
         let [theta0, theta1] = iterated;
 
@@ -277,13 +296,16 @@ mod tests {
                 Differentiable::of_scalar(Scalar::zero()),
             ];
             gradient_descent(
-                hyper,
+                HyperAndFreeze {
+                    hyper,
+                    to_immutable: NakedGradientDescent::to_immutable,
+                },
                 &xs,
-                RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiable::of_slice_2::<_, 2>(x).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_plane),
-                hyper::NakedGradientDescent::to_immutable,
+                &mut predictor::naked(predict_plane),
             )
         };
 
@@ -343,13 +365,16 @@ mod tests {
             ];
 
             gradient_descent(
-                hyper,
+                HyperAndFreeze {
+                    hyper,
+                    to_immutable: VelocityGradientDescent::to_immutable,
+                },
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::velocity(predict_plane),
-                hyper::VelocityGradientDescent::to_immutable,
+                &mut predictor::velocity(predict_plane),
             )
         };
 
@@ -383,13 +408,16 @@ mod tests {
             ];
 
             gradient_descent(
-                hyper,
+                HyperAndFreeze {
+                    hyper,
+                    to_immutable: RmsGradientDescent::to_immutable,
+                },
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::rms(predict_plane),
-                hyper::RmsGradientDescent::to_immutable,
+                &mut predictor::rms(predict_plane),
             )
         };
 
@@ -432,13 +460,16 @@ mod tests {
             ];
 
             gradient_descent(
-                hyper,
+                HyperAndFreeze {
+                    hyper,
+                    to_immutable: AdamGradientDescent::to_immutable,
+                },
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::adam(predict_plane),
-                hyper::AdamGradientDescent::to_immutable,
+                &mut predictor::adam(predict_plane),
             )
         };
 

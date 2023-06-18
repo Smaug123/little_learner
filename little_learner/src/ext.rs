@@ -2,10 +2,12 @@ use crate::auto_diff::{
     Differentiable, DifferentiableTagged, RankedDifferentiable, RankedDifferentiableTagged,
 };
 use crate::decider::rectify;
+use crate::loss::squared_2;
 use crate::scalar::Scalar;
 use crate::traits::{NumLike, Zero};
+use std::fmt::Display;
 use std::iter::Sum;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Neg};
 
 pub fn ext1<A, B, Tag, Tag2, F>(
     n: usize,
@@ -54,6 +56,26 @@ where
     }
 }
 
+pub fn plus<A, Tag, Tag2>(
+    x: &DifferentiableTagged<A, Tag>,
+    y: &DifferentiableTagged<A, Tag2>,
+) -> Differentiable<A>
+where
+    A: Clone + Add<Output = A>,
+    Tag: Clone,
+    Tag2: Clone,
+{
+    ext2(
+        0,
+        0,
+        &mut |x, y| {
+            Differentiable::of_scalar(x.borrow_scalar().clone() + y.borrow_scalar().clone())
+        },
+        x,
+        y,
+    )
+}
+
 pub fn elementwise_mul_via_ext<A, Tag, Tag2, const RANK1: usize, const RANK2: usize>(
     x: &RankedDifferentiableTagged<A, Tag, RANK1>,
     y: &RankedDifferentiableTagged<A, Tag2, RANK2>,
@@ -76,6 +98,30 @@ where
     .unwrap()
 }
 
+pub fn star_1_1<T, Tag, Tag2>(
+    x: &DifferentiableTagged<T, Tag>,
+    y: &DifferentiableTagged<T, Tag2>,
+) -> Differentiable<T>
+where
+    T: Clone + Sum + Mul<Output = T> + Default,
+    Tag: Clone,
+    Tag2: Clone,
+{
+    ext2(
+        1,
+        1,
+        &mut |x, y| {
+            elementwise_mul_via_ext(
+                &x.clone().attach_rank::<1>().unwrap(),
+                &y.clone().attach_rank::<1>().unwrap(),
+            )
+            .to_unranked()
+        },
+        x,
+        y,
+    )
+}
+
 /// Produce the element-wise multiplication of the inputs, threading where necessary until the
 /// first argument has rank 2 and the second argument has rank 1.
 /// This is essentially "matrix-multiply a matrix by a vector, but don't do the sum; instead
@@ -89,19 +135,7 @@ where
     Tag: Clone,
     Tag2: Clone,
 {
-    ext2(
-        2,
-        1,
-        &mut |x, y| {
-            elementwise_mul_via_ext(
-                &x.clone().attach_rank::<2>().unwrap(),
-                &y.clone().attach_rank::<1>().unwrap(),
-            )
-            .to_unranked()
-        },
-        x,
-        y,
-    )
+    ext2(2, 1, &mut star_1_1, x, y)
 }
 
 fn sum_1_scalar<A, Tag>(x: RankedDifferentiableTagged<A, Tag, 1>) -> Scalar<A>
@@ -158,42 +192,38 @@ pub fn linear<A, Tag1, Tag2, Tag3>(
     t: &DifferentiableTagged<A, Tag3>,
 ) -> DifferentiableTagged<A, ()>
 where
-    A: NumLike + Default,
+    A: NumLike + Default + Display,
     Tag1: Clone,
     Tag2: Clone,
     Tag3: Clone,
 {
-    dot_2_1(theta0, t).map2_tagged(theta1, &mut |x, _, y, _| (x.clone() + y.clone(), ()))
+    let dotted = dot_2_1(theta0, t);
+    plus(&dotted, theta1)
 }
 
 pub fn relu<A, Tag1, Tag2, Tag3>(
-    t: &RankedDifferentiableTagged<A, Tag1, 1>,
+    t: &DifferentiableTagged<A, Tag1>,
     theta0: &RankedDifferentiableTagged<A, Tag2, 2>,
     theta1: &RankedDifferentiableTagged<A, Tag3, 1>,
 ) -> Differentiable<A>
 where
-    A: NumLike + PartialOrd + Default,
+    A: NumLike + PartialOrd + Default + Display,
     Tag1: Clone,
     Tag2: Clone,
     Tag3: Clone,
 {
-    linear(
-        theta0.to_unranked_borrow(),
-        theta1.to_unranked_borrow(),
-        t.to_unranked_borrow(),
-    )
-    .map(&mut rectify)
+    linear(theta0.to_unranked_borrow(), theta1.to_unranked_borrow(), t).map(&mut rectify)
 }
 
 pub fn k_relu<A, Tag>(
-    t: &RankedDifferentiableTagged<A, Tag, 1>,
+    t: &DifferentiableTagged<A, Tag>,
     theta: &[Differentiable<A>],
 ) -> Differentiable<A>
 where
     Tag: Clone,
-    A: NumLike + PartialOrd + Default,
+    A: NumLike + PartialOrd + Default + std::fmt::Display,
 {
-    assert!(theta.len() < 2, "Needed at least 2 parameters for k_relu");
+    assert!(theta.len() >= 2, "Needed at least 2 parameters for k_relu");
     let once = relu(
         t,
         &theta[0].clone().attach_rank::<2>().unwrap(),
@@ -202,8 +232,33 @@ where
     if theta.len() == 2 {
         once
     } else {
-        k_relu(&once.attach_rank().unwrap(), &theta[2..])
+        k_relu(&once, &theta[2..])
     }
+}
+
+pub fn l2_norm<A, const RANK: usize>(
+    prediction: &RankedDifferentiable<A, RANK>,
+    data: &RankedDifferentiable<A, RANK>,
+) -> Differentiable<A>
+where
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero + Neg,
+{
+    let diff = RankedDifferentiable::map2(prediction, data, &mut |x, y| x.clone() - y.clone());
+    sum(squared_2(&diff).to_unranked_borrow())
+}
+
+pub fn l2_loss<A, F, Params, const RANK: usize>(
+    target: &mut F,
+    data_xs: &Differentiable<A>,
+    data_ys: RankedDifferentiable<A, RANK>,
+    params: Params,
+) -> Differentiable<A>
+where
+    F: FnMut(&Differentiable<A>, Params) -> RankedDifferentiable<A, RANK>,
+    A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero,
+{
+    let pred_ys = target(data_xs, params);
+    l2_norm(&pred_ys, &data_ys)
 }
 
 #[cfg(test)]
@@ -418,7 +473,7 @@ mod tests {
         let theta1 = RankedDifferentiable::of_slice(&biases);
         let t = RankedDifferentiable::of_slice(&inputs);
 
-        let result = relu(&t, &theta0, &theta1)
+        let result = relu(t.to_unranked_borrow(), &theta0, &theta1)
             .into_vector()
             .iter()
             .map(|x| x.borrow_scalar().clone_real_part().into_inner())
