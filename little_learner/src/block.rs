@@ -14,6 +14,7 @@ pub struct Block<F: ?Sized, const N: usize> {
 }
 
 /// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
+#[must_use]
 pub fn compose_once<'a, 'c, 'd, A, T, B, C, F, G, const N: usize, const M: usize>(
     b1: Block<F, N>,
     b2: Block<G, M>,
@@ -40,6 +41,7 @@ where
 type TwoArgBorrower<A1, A2Elt, Out> = dyn for<'a, 'b> FnMut(&'a A1, &'b [A2Elt]) -> Out;
 
 /// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
+#[must_use]
 pub fn compose_mut<A, T, B, C, F, G, const N: usize, const M: usize>(
     mut b1: Block<F, N>,
     mut b2: Block<G, M>,
@@ -86,6 +88,7 @@ where
     }
 }
 
+#[must_use]
 pub fn dense_initial_weights<A, R>(
     rng: &mut R,
     input_len: usize,
@@ -116,6 +119,7 @@ where
     Differentiable::of_vec(rows)
 }
 
+#[must_use]
 pub fn dense_initial_biases<A>(neuron_count: usize) -> Differentiable<A>
 where
     A: crate::traits::Zero + Clone,
