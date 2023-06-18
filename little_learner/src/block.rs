@@ -37,12 +37,14 @@ where
     }
 }
 
+type TwoArgBorrower<A1, A2Elt, Out> = dyn for<'a, 'b> FnMut(&'a A1, &'b [A2Elt]) -> Out;
+
 /// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
 pub fn compose_mut<A, T, B, C, F, G, const N: usize, const M: usize>(
     mut b1: Block<F, N>,
     mut b2: Block<G, M>,
     j: usize,
-) -> Block<dyn for<'a, 'b> FnMut(&'a A, &'b [T]) -> C, { N + M }>
+) -> Block<TwoArgBorrower<A, T, C>, { N + M }>
 where
     F: for<'a, 'd> FnMut(&'a A, &'d [T]) -> B + 'static,
     G: for<'b, 'd> FnMut(&'b B, &'d [T]) -> C + 'static,

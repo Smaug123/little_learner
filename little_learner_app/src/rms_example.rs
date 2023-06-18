@@ -1,7 +1,7 @@
 use little_learner::auto_diff::{Differentiable, RankedDifferentiable, RankedDifferentiableTagged};
 
 use little_learner::gradient_descent::gradient_descent;
-use little_learner::hyper;
+use little_learner::hyper::{HyperAndFreeze, RmsGradientDescent};
 use little_learner::loss::predict_plane;
 use little_learner::not_nan::{to_not_nan_1, to_not_nan_2};
 use little_learner::predictor;
@@ -22,7 +22,7 @@ const PLANE_YS: [f64; 6] = [13.99, 15.99, 18.0, 22.4, 30.2, 37.94];
 pub(crate) fn rms_example() {
     let beta = NotNan::new(0.9).expect("not nan");
     let stabilizer = NotNan::new(0.000_000_01).expect("not nan");
-    let hyper = hyper::RmsGradientDescent::default(NotNan::new(0.01).expect("not nan"), 3000)
+    let hyper = RmsGradientDescent::default(NotNan::new(0.01).expect("not nan"), 3000)
         .with_stabilizer(stabilizer)
         .with_beta(beta);
 
@@ -36,14 +36,16 @@ pub(crate) fn rms_example() {
         ];
 
         gradient_descent(
-            hyper,
+            HyperAndFreeze {
+                hyper,
+                to_immutable: RmsGradientDescent::to_immutable,
+            },
             &xs,
             &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
             &mut |x| RankedDifferentiableTagged::of_slice(x),
             &ys,
             zero_params,
             &mut predictor::rms(predict_plane),
-            hyper::RmsGradientDescent::to_immutable,
         )
     };
 

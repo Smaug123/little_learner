@@ -6,6 +6,7 @@ use crate::rms_example::rms_example;
 use little_learner::argmax::one_hot_class_eq;
 use little_learner::auto_diff::{Differentiable, RankedDifferentiable};
 use little_learner::gradient_descent::gradient_descent;
+use little_learner::hyper::{HyperAndFreeze, NakedGradientDescent};
 use little_learner::predictor::naked;
 use little_learner::scalar::Scalar;
 use little_learner::{block, hyper};
@@ -91,14 +92,16 @@ fn main() {
     );
 
     let params = gradient_descent(
-        hyper,
+        HyperAndFreeze {
+            hyper,
+            to_immutable: NakedGradientDescent::to_immutable,
+        },
         &data.training_xs,
         &mut to_diff,
         &mut to_diff_out,
         &data.training_ys,
         all_weights,
         &mut predictor,
-        hyper::NakedGradientDescent::to_immutable,
     );
 
     println!("First layer weights: {}", &params[0]);
