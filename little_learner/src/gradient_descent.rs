@@ -66,7 +66,7 @@ pub fn gradient_descent<
     to_ranked_differentiable_out: &mut I,
     ys: &[OutPoint],
     zero_params: [Differentiable<T>; PARAM_NUM],
-    mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
+    predictor: &mut Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
     to_immutable: H,
 ) -> [Differentiable<T>; PARAM_NUM]
 where
@@ -162,7 +162,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_line_2_unranked),
+                &mut predictor::naked(predict_line_2_unranked),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -194,11 +194,11 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_quadratic_unranked),
+                &mut predictor::naked(predict_quadratic_unranked),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -241,7 +241,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_plane),
+                &mut predictor::naked(predict_plane),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -278,7 +278,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::naked(predict_plane),
+                &mut predictor::naked(predict_plane),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -345,7 +345,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::velocity(predict_plane),
+                &mut predictor::velocity(predict_plane),
                 hyper::VelocityGradientDescent::to_immutable,
             )
         };
@@ -386,7 +386,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::rms(predict_plane),
+                &mut predictor::rms(predict_plane),
                 hyper::RmsGradientDescent::to_immutable,
             )
         };
@@ -436,7 +436,7 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                predictor::adam(predict_plane),
+                &mut predictor::adam(predict_plane),
                 hyper::AdamGradientDescent::to_immutable,
             )
         };

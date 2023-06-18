@@ -42,7 +42,7 @@ pub(crate) fn rms_example() {
             &mut |x| RankedDifferentiableTagged::of_slice(x),
             &ys,
             zero_params,
-            predictor::rms(predict_plane),
+            &mut predictor::rms(predict_plane),
             hyper::RmsGradientDescent::to_immutable,
         )
     };

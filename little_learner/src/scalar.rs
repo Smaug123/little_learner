@@ -395,7 +395,7 @@ mod test_loss {
     fn sqrt_gradient() {
         let nine = Differentiable::of_scalar(Scalar::make(NotNan::new(9.0).expect("not nan")));
         let graded: [Differentiable<NotNan<f64>>; 1] = grad(
-            |x| RankedDifferentiable::of_scalar(x[0].clone().into_scalar().sqrt()),
+            |x| Differentiable::of_scalar(x[0].clone().into_scalar().sqrt()),
             &[nine],
         );
         let graded = graded.map(|x| x.into_scalar().clone_real_part().into_inner())[0];

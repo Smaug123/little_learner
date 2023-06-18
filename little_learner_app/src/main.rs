@@ -3,6 +3,7 @@
 #![feature(closure_lifetime_binder)]
 
 use crate::rms_example::rms_example;
+use little_learner::argmax::one_hot_class_eq;
 use little_learner::auto_diff::{Differentiable, RankedDifferentiable};
 use little_learner::gradient_descent::gradient_descent;
 use little_learner::predictor::naked;
@@ -49,11 +50,13 @@ where
 }
 
 fn main() {
+    rms_example();
+
     let irises = iris::import::<f64, _>()
         .iter()
         .map(|x| x.map(|z| NotNan::new(z).unwrap()))
         .collect::<Vec<_>>();
-    let (training_xs, training_ys, _test_xs, _test_ys) = iris::partition(&irises);
+    let (training_xs, training_ys, test_xs, test_ys) = iris::partition(&irises);
     let mut network = block::compose_mut(
         block::dense_mut::<NotNan<f64>, ()>(6, 3),
         block::dense_mut(4, 6),
@@ -75,26 +78,36 @@ fn main() {
     let hyper = hyper::NakedGradientDescent::new(NotNan::new(0.0002).expect("not nan"), 2000)
         .with_rng(rng, 8);
 
-    let predictor = naked(
+    let mut predictor = naked(
         for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
-                     y: &'b [Differentiable<NotNan<f64>>; 4]|
+                     params: &'b [Differentiable<NotNan<f64>>; 4]|
                      -> RankedDifferentiable<NotNan<f64>, 2> {
+            let params = params.clone();
             let x = x.clone();
-            let y = y.clone();
-            (network.f)(&x, &y).attach_rank().unwrap()
+            (network.f)(&x, &params).attach_rank().unwrap()
         },
     );
 
-    let _iterated = gradient_descent(
+    let params = gradient_descent(
         hyper,
         &training_xs,
         &mut to_diff,
         &mut to_diff_out,
         &training_ys,
         all_weights,
-        predictor,
+        &mut predictor,
         hyper::NakedGradientDescent::to_immutable,
     );
 
-    rms_example();
+    for (test_x, expected) in test_xs.iter().zip(test_ys.iter()) {
+        let actual = (predictor.predict)(&to_diff(&[test_x.clone()]), &params);
+        // We made a single prediction so this is safe:
+        let actual = &actual.to_vector()[0];
+        let expected = &to_diff_out(&[expected.clone()]).to_vector()[0];
+        if !one_hot_class_eq(expected, actual) {
+            println!("Bad prediction!")
+        } else {
+            println!("Good prediction!")
+        }
+    }
 }
