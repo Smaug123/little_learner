@@ -1,5 +1,5 @@
-use crate::auto_diff::{Differentiable, RankedDifferentiable, RankedDifferentiableTagged};
-use crate::ext::relu;
+use crate::auto_diff::{Differentiable, DifferentiableTagged};
+use crate::ext::{k_relu, relu};
 use crate::scalar::Scalar;
 use crate::traits::NumLike;
 use num::Float;
@@ -64,10 +64,7 @@ pub fn dense_once<'b, A, Tag>(
     input_len: usize,
     neuron_count: usize,
 ) -> Block<
-    impl for<'a> FnOnce(
-        &'a RankedDifferentiableTagged<A, Tag, 1>,
-        &'b [Differentiable<A>],
-    ) -> RankedDifferentiable<A, 1>,
+    impl for<'a> FnOnce(&'a DifferentiableTagged<A, Tag>, &'b [Differentiable<A>]) -> Differentiable<A>,
     2,
 >
 where
@@ -76,16 +73,14 @@ where
 {
     Block {
         f: Box::new(
-            for<'a> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
+            for<'a> |t: &'a DifferentiableTagged<A, Tag>,
                      theta: &'b [Differentiable<A>]|
-                     -> RankedDifferentiable<A, 1> {
+                     -> Differentiable<A> {
                 relu(
                     t,
                     &(theta[0].clone().attach_rank().unwrap()),
                     &(theta[1].clone().attach_rank().unwrap()),
                 )
-                .attach_rank()
-                .unwrap()
             },
         ),
         ranks: [input_len, neuron_count],
@@ -98,9 +93,9 @@ pub fn dense_mut<A, Tag>(
     neuron_count: usize,
 ) -> Block<
     impl for<'a, 'b> FnMut(
-        &'a RankedDifferentiableTagged<A, Tag, 1>,
+        &'a DifferentiableTagged<A, Tag>,
         &'b [Differentiable<A>],
-    ) -> RankedDifferentiable<A, 1>,
+    ) -> Differentiable<A>,
     2,
 >
 where
@@ -109,17 +104,9 @@ where
 {
     Block {
         f: Box::new(
-            for<'a, 'b> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
+            for<'a, 'b> |t: &'a DifferentiableTagged<A, Tag>,
                          theta: &'b [Differentiable<A>]|
-                         -> RankedDifferentiable<A, 1> {
-                relu(
-                    t,
-                    &(theta[0].clone().attach_rank().unwrap()),
-                    &(theta[1].clone().attach_rank().unwrap()),
-                )
-                .attach_rank()
-                .unwrap()
-            },
+                         -> Differentiable<A> { k_relu(t, theta) },
         ),
         ranks: [input_len, neuron_count],
     }

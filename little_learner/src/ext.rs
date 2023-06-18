@@ -167,7 +167,7 @@ where
 }
 
 pub fn relu<A, Tag1, Tag2, Tag3>(
-    t: &RankedDifferentiableTagged<A, Tag1, 1>,
+    t: &DifferentiableTagged<A, Tag1>,
     theta0: &RankedDifferentiableTagged<A, Tag2, 2>,
     theta1: &RankedDifferentiableTagged<A, Tag3, 1>,
 ) -> Differentiable<A>
@@ -177,16 +177,11 @@ where
     Tag2: Clone,
     Tag3: Clone,
 {
-    linear(
-        theta0.to_unranked_borrow(),
-        theta1.to_unranked_borrow(),
-        t.to_unranked_borrow(),
-    )
-    .map(&mut rectify)
+    linear(theta0.to_unranked_borrow(), theta1.to_unranked_borrow(), t).map(&mut rectify)
 }
 
 pub fn k_relu<A, Tag>(
-    t: &RankedDifferentiableTagged<A, Tag, 1>,
+    t: &DifferentiableTagged<A, Tag>,
     theta: &[Differentiable<A>],
 ) -> Differentiable<A>
 where
@@ -202,7 +197,7 @@ where
     if theta.len() == 2 {
         once
     } else {
-        k_relu(&once.attach_rank().unwrap(), &theta[2..])
+        k_relu(&once, &theta[2..])
     }
 }
 
@@ -418,7 +413,7 @@ mod tests {
         let theta1 = RankedDifferentiable::of_slice(&biases);
         let t = RankedDifferentiable::of_slice(&inputs);
 
-        let result = relu(&t, &theta0, &theta1)
+        let result = relu(t.to_unranked_borrow(), &theta0, &theta1)
             .into_vector()
             .iter()
             .map(|x| x.borrow_scalar().clone_real_part().into_inner())

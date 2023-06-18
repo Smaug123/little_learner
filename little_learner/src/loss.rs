@@ -88,14 +88,14 @@ where
     sum_1(squared_2(&diff)).into_scalar()
 }
 
-pub fn l2_loss_2<A, F, Params, const N: usize>(
+pub fn l2_loss_2<A, F, Params>(
     target: &mut F,
-    data_xs: RankedDifferentiable<A, N>,
+    data_xs: &Differentiable<A>,
     data_ys: RankedDifferentiable<A, 1>,
     params: Params,
 ) -> Scalar<A>
 where
-    F: FnMut(RankedDifferentiable<A, N>, Params) -> RankedDifferentiable<A, 1>,
+    F: FnMut(&Differentiable<A>, Params) -> RankedDifferentiable<A, 1>,
     A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero,
 {
     let pred_ys = target(data_xs, params);
@@ -103,15 +103,15 @@ where
 }
 
 pub fn predict_line_2<A>(
-    xs: RankedDifferentiable<A, 1>,
-    theta: &[RankedDifferentiable<A, 0>; 2],
+    xs: &RankedDifferentiable<A, 1>,
+    theta: [RankedDifferentiable<A, 0>; 2],
 ) -> RankedDifferentiable<A, 1>
 where
     A: Mul<Output = A> + Add<Output = A> + Sum<<A as Mul>::Output> + Copy + Default + One + Zero,
 {
-    let xs = RankedDifferentiable::to_vector(xs)
+    let xs = xs.to_unranked_borrow().borrow_vector()
         .into_iter()
-        .map(|v| v.to_scalar());
+        .map(|v| v.borrow_scalar());
     let mut result = vec![];
     for x in xs {
         let left_arg = RankedDifferentiable::of_vector(vec![
@@ -221,7 +221,7 @@ where
 /// # Panics
 /// Panics if the input `theta` is not of rank 1 consisting of a tensor1 and a scalar.
 pub fn predict_plane<A>(
-    xs: RankedDifferentiable<A, 2>,
+    xs: &Differentiable<A>,
     theta: &[Differentiable<A>; 2],
 ) -> RankedDifferentiable<A, 1>
 where
@@ -242,10 +242,10 @@ where
     );
     let theta1 = theta[1].clone().attach_rank::<0>().unwrap();
     let dotted: Vec<_> = xs
-        .to_vector()
+        .borrow_vector()
         .into_iter()
         .map(|point| {
-            sum(elementwise_mul(&theta0, &point).to_unranked_borrow())
+            sum(elementwise_mul(&theta0, &point.clone().attach_rank::<1>().unwrap()).to_unranked_borrow())
                 .attach_rank::<0>()
                 .unwrap()
         })
@@ -266,10 +266,10 @@ mod test_loss {
         let xs = [2.0, 1.0, 4.0, 3.0];
         let ys = [1.8, 1.2, 4.2, 3.3];
         let loss = l2_loss_2(
-            &mut predict_line_2,
-            RankedDifferentiable::of_slice(&xs),
+            &mut |x, y| { predict_line_2(&x.attach_rank::<1>().unwrap(), y) },
+            RankedDifferentiable::of_slice(&xs).to_unranked_borrow(),
             RankedDifferentiable::of_slice(&ys),
-            &[
+            [
                 RankedDifferentiable::of_scalar(Scalar::zero()),
                 RankedDifferentiable::of_scalar(Scalar::zero()),
             ],

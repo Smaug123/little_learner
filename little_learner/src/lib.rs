@@ -3,6 +3,7 @@
 #![feature(array_methods)]
 #![feature(closure_lifetime_binder)]
 
+pub mod argmax;
 pub mod auto_diff;
 pub mod block;
 pub mod decider;

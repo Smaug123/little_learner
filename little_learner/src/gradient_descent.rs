@@ -66,12 +66,11 @@ pub fn gradient_descent<
     Inflated,
     Hyper,
     ImmutableHyper,
-    const IN_SIZE: usize,
     const PARAM_NUM: usize,
 >(
     hyper: Hyper,
     xs: &'a [Point],
-    to_ranked_differentiable: &mut G,
+    to_differentiable: &mut G,
     to_ranked_differentiable_out: &mut I,
     ys: &[OutPoint],
     zero_params: [Differentiable<T>; PARAM_NUM],
@@ -83,10 +82,10 @@ where
     Point: 'a + Copy,
     OutPoint: Copy,
     F: FnMut(
-        RankedDifferentiable<T, IN_SIZE>,
+        &Differentiable<T>,
         &[Differentiable<T>; PARAM_NUM],
     ) -> RankedDifferentiable<T, 1>,
-    G: for<'b> FnMut(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+    G: for<'b> FnMut(&'b [Point]) -> Differentiable<T>,
     I: for<'b> FnMut(&'b [OutPoint]) -> RankedDifferentiable<T, 1>,
     Inflated: Clone,
     ImmutableHyper: Clone,
@@ -104,7 +103,7 @@ where
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
                             &mut predictor.predict,
-                            to_ranked_differentiable(xs),
+                            &to_differentiable(xs),
                             to_ranked_differentiable_out(ys),
                             x,
                         ),
@@ -114,7 +113,7 @@ where
                         RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                             l2_loss_2(
                                 &mut predictor.predict,
-                                to_ranked_differentiable(&sampled_xs),
+                                &to_differentiable(&sampled_xs),
                                 to_ranked_differentiable_out(&sampled_ys),
                                 x,
                             ),
@@ -171,7 +170,7 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,

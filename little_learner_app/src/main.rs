@@ -5,23 +5,40 @@
 use crate::rms_example::rms_example;
 use little_learner::auto_diff::{Differentiable, RankedDifferentiable};
 use little_learner::gradient_descent::gradient_descent;
-use little_learner::{block, hyper, naked};
+use little_learner::predictor::naked;
+use little_learner::scalar::Scalar;
+use little_learner::{block, hyper};
 use ordered_float::NotNan;
 use rand::thread_rng;
 
 mod iris;
 mod rms_example;
 
-fn to_ranked_out<A>(x: &[[A; 3]]) -> RankedDifferentiable<A, 1> {
-    todo!()
+fn to_diff<A, const N: usize>(x: &[[A; N]]) -> Differentiable<A>
+where
+    A: Clone,
+{
+    Differentiable::of_vec(
+        x.iter()
+            .map(|x| {
+                Differentiable::of_vec(
+                    x.iter().map(|i| Differentiable::of_scalar(Scalar::make(i.clone())))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
-fn to_ranked<A>(x: &[[A; 4]]) -> RankedDifferentiable<A, 1> {
+fn to_diff_out<A, const N: usize>(x: &[[A; N]]) -> RankedDifferentiable<A, 1>
+    where
+        A: Clone,
+{
     todo!()
 }
 
 fn main() {
-    rms_example();
+    //rms_example();
 
     let irises = iris::import::<f64, _>()
         .iter()
@@ -50,20 +67,20 @@ fn main() {
         .with_rng(rng, 8);
 
     let predictor = naked(
-        for<'b> |x: RankedDifferentiable<NotNan<f64>, 1>,
+        for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
                  y: &'b [Differentiable<NotNan<f64>>; 4]|
                  -> RankedDifferentiable<NotNan<f64>, 1> {
             let x = x.clone();
             let y = y.clone();
-            (network.f)(&x, &y)
+            (network.f)(&x, &y).attach_rank().unwrap()
         },
     );
 
     let _iterated = gradient_descent(
         hyper,
         &training_xs,
-        &mut to_ranked,
-        &mut to_ranked_out,
+        &mut to_diff,
+        &mut to_diff_out,
         &training_ys,
         all_weights,
         predictor,

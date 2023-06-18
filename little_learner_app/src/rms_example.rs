@@ -38,7 +38,7 @@ pub(crate) fn rms_example() {
         gradient_descent(
             hyper,
             &xs,
-            &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x),
+            &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
             &mut |x| RankedDifferentiableTagged::of_slice(x),
             &ys,
             zero_params,
