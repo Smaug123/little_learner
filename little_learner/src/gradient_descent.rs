@@ -162,7 +162,13 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                &mut predictor::naked(predict_line_2_unranked),
+                &mut predictor::naked(
+                    for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
+                                 y: &'b [Differentiable<NotNan<f64>>; 2]|
+                                 -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_line_2_unranked(&x.clone().attach_rank().unwrap(), y)
+                    },
+                ),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -198,7 +204,13 @@ mod tests {
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                &mut predictor::naked(predict_quadratic_unranked),
+                &mut predictor::naked(
+                    |x: &Differentiable<NotNan<f64>>,
+                     y: &[Differentiable<NotNan<f64>>; 3]|
+                     -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_quadratic_unranked(x.clone().attach_rank().unwrap(), y)
+                    },
+                ),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -237,11 +249,17 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiable::of_slice_2::<_, 2>(x).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
-                &mut predictor::naked(predict_plane),
+                &mut predictor::naked(
+                    for<'a, 'b> |x: &'a Differentiable<NotNan<f64>>,
+                                 y: &'b [Differentiable<NotNan<f64>>; 2]|
+                                 -> RankedDifferentiable<NotNan<f64>, 1> {
+                        predict_plane(x, y)
+                    },
+                ),
                 hyper::NakedGradientDescent::to_immutable,
             )
         };
@@ -274,7 +292,7 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiable::of_slice_2::<_, 2>(x).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
@@ -341,7 +359,7 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
@@ -382,7 +400,7 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
@@ -432,7 +450,7 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |x| RankedDifferentiableTagged::of_slice_2::<_, 2>(x).to_unranked(),
                 &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,

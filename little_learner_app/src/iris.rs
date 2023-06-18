@@ -65,11 +65,15 @@ where
     output
 }
 
+pub struct DataPartition<A> {
+    pub training_xs: Vec<[A; 4]>,
+    pub training_ys: Vec<[A; 3]>,
+    pub test_xs: Vec<[A; 4]>,
+    pub test_ys: Vec<[A; 3]>,
+}
+
 /// Returns the training xs, training ys, test xs, and test ys.
-pub fn partition<A, R>(
-    rng: &mut R,
-    irises: &[Iris<A>],
-) -> (Vec<[A; 4]>, Vec<[A; 3]>, Vec<[A; 4]>, Vec<[A; 3]>)
+pub fn partition<A, R>(rng: &mut R, irises: &[Iris<A>]) -> DataPartition<A>
 where
     A: Clone + One + Zero + Copy,
     R: Rng,
@@ -97,7 +101,12 @@ where
         }
     }
 
-    (training_xs, training_ys, test_xs, test_ys)
+    DataPartition {
+        training_xs,
+        training_ys,
+        test_xs,
+        test_ys,
+    }
 }
 
 impl<A> Iris<A> {

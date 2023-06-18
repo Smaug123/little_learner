@@ -59,7 +59,7 @@ fn main() {
 
     let mut rng = thread_rng();
 
-    let (training_xs, training_ys, test_xs, test_ys) = iris::partition(&mut rng, &irises);
+    let data = iris::partition(&mut rng, &irises);
     let mut network = block::compose_mut(
         block::dense_mut::<NotNan<f64>, ()>(6, 3),
         block::dense_mut(4, 6),
@@ -92,10 +92,10 @@ fn main() {
 
     let params = gradient_descent(
         hyper,
-        &training_xs,
+        &data.training_xs,
         &mut to_diff,
         &mut to_diff_out,
-        &training_ys,
+        &data.training_ys,
         all_weights,
         &mut predictor,
         hyper::NakedGradientDescent::to_immutable,
@@ -108,12 +108,12 @@ fn main() {
 
     let mut good_count = 0;
     let mut bad_count = 0;
-    for (test_x, expected) in test_xs.iter().zip(test_ys.iter()) {
-        let actual = (predictor.predict)(&to_diff(&[test_x.clone()]), &params);
+    for (test_x, expected) in data.test_xs.iter().zip(data.test_ys.iter()) {
+        let actual = (predictor.predict)(&to_diff(&[*test_x]), &params);
         println!("Test: {:?}. Actual: {}", test_x, actual);
         // We made a single prediction so this is safe:
         let actual = &actual.to_vector()[0];
-        let expected = &to_diff_out(&[expected.clone()]).to_vector()[0];
+        let expected = &to_diff_out(&[*expected]).to_vector()[0];
         if !one_hot_class_eq(expected, actual) {
             println!("Bad prediction! Actual: {}; expected: {}", actual, expected);
             bad_count += 1;

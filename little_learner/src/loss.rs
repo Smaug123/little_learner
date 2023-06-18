@@ -112,7 +112,7 @@ where
     let xs = xs
         .to_unranked_borrow()
         .borrow_vector()
-        .into_iter()
+        .iter()
         .map(|v| v.borrow_scalar());
     let mut result = vec![];
     for x in xs {
@@ -144,7 +144,7 @@ where
     let xs = xs
         .to_unranked_borrow()
         .borrow_vector()
-        .into_iter()
+        .iter()
         .map(|v| v.borrow_scalar());
     let mut result = vec![];
     for x in xs {
@@ -247,7 +247,7 @@ where
     let theta1 = theta[1].clone().attach_rank::<0>().unwrap();
     let dotted: Vec<_> = xs
         .borrow_vector()
-        .into_iter()
+        .iter()
         .map(|point| {
             sum(
                 elementwise_mul(&theta0, &point.clone().attach_rank::<1>().unwrap())
@@ -273,7 +273,7 @@ mod test_loss {
         let xs = [2.0, 1.0, 4.0, 3.0];
         let ys = [1.8, 1.2, 4.2, 3.3];
         let loss = l2_loss_2(
-            &mut |x, y| predict_line_2(&x.attach_rank::<1>().unwrap(), y),
+            &mut |x, y| predict_line_2(&x.clone().attach_rank::<1>().unwrap(), y),
             RankedDifferentiable::of_slice(&xs).to_unranked_borrow(),
             RankedDifferentiable::of_slice(&ys),
             [

@@ -356,7 +356,7 @@ where
 
 #[cfg(test)]
 mod test_loss {
-    use crate::auto_diff::{grad, Differentiable, RankedDifferentiable};
+    use crate::auto_diff::{grad, Differentiable};
     use crate::scalar::Scalar;
     use crate::traits::Sqrt;
     use ordered_float::NotNan;
