@@ -94,10 +94,10 @@ impl<A> Iris<A> {
         A: Copy + Clone + Zero + One,
     {
         let vec = [
-            self.petal_length.clone(),
-            self.petal_width.clone(),
-            self.sepal_length.clone(),
-            self.sepal_width.clone(),
+            self.petal_length,
+            self.petal_width,
+            self.sepal_length,
+            self.sepal_width,
         ];
 
         let mut one_hot = [A::zero(); 3];

@@ -8,8 +8,8 @@ use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use rand::Rng;
 
-pub struct Block<F, const N: usize> {
-    pub f: F,
+pub struct Block<F: ?Sized, const N: usize> {
+    pub f: Box<F>,
     ranks: [usize; N],
 }
 
@@ -29,34 +29,32 @@ where
     ranks[..N].copy_from_slice(&b1.ranks);
     ranks[N..(M + N)].copy_from_slice(&b2.ranks);
     Block {
-        f: move |t, theta| {
+        f: Box::new(move |t, theta| {
             let intermediate = (b1.f)(t, theta);
             (b2.f)(&intermediate, &theta[j..])
-        },
+        }),
         ranks,
     }
 }
 
 /// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
-pub fn compose_mut<'a, 'c, 'd, A, T, B, C, F, G, const N: usize, const M: usize>(
+pub fn compose_mut<A, T, B, C, F, G, const N: usize, const M: usize>(
     mut b1: Block<F, N>,
     mut b2: Block<G, M>,
     j: usize,
-) -> Block<impl FnMut(&'a A, &'d [T]) -> C, { N + M }>
+) -> Block<dyn for<'a, 'b> FnMut(&'a A, &'b [T]) -> C, { N + M }>
 where
-    F: FnMut(&'a A, &'d [T]) -> B,
-    G: for<'b> FnMut(&'b B, &'d [T]) -> C,
-    A: 'a,
-    T: 'd,
+    F: for<'a, 'd> FnMut(&'a A, &'d [T]) -> B + 'static,
+    G: for<'b, 'd> FnMut(&'b B, &'d [T]) -> C + 'static,
 {
     let mut ranks = [0usize; N + M];
     ranks[..N].copy_from_slice(&b1.ranks);
     ranks[N..(M + N)].copy_from_slice(&b2.ranks);
     Block {
-        f: move |t, theta| {
+        f: Box::new(move |t, theta| {
             let intermediate = (b1.f)(t, theta);
             (b2.f)(&intermediate, &theta[j..])
-        },
+        }),
         ranks,
     }
 }
@@ -77,27 +75,29 @@ where
     A: NumLike + PartialOrd + Default,
 {
     Block {
-        f: for<'a> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
-                    theta: &'b [Differentiable<A>]|
-                 -> RankedDifferentiable<A, 1> {
-            relu(
-                t,
-                &(theta[0].clone().attach_rank().unwrap()),
-                &(theta[1].clone().attach_rank().unwrap()),
-            )
-            .attach_rank()
-            .unwrap()
-        },
+        f: Box::new(
+            for<'a> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
+                     theta: &'b [Differentiable<A>]|
+                     -> RankedDifferentiable<A, 1> {
+                relu(
+                    t,
+                    &(theta[0].clone().attach_rank().unwrap()),
+                    &(theta[1].clone().attach_rank().unwrap()),
+                )
+                .attach_rank()
+                .unwrap()
+            },
+        ),
         ranks: [input_len, neuron_count],
     }
 }
 
 #[must_use]
-pub fn dense_mut<'b, A, Tag>(
+pub fn dense_mut<A, Tag>(
     input_len: usize,
     neuron_count: usize,
 ) -> Block<
-    impl for<'a> FnMut(
+    impl for<'a, 'b> FnMut(
         &'a RankedDifferentiableTagged<A, Tag, 1>,
         &'b [Differentiable<A>],
     ) -> RankedDifferentiable<A, 1>,
@@ -108,17 +108,19 @@ where
     A: NumLike + PartialOrd + Default,
 {
     Block {
-        f: for<'a> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
-                    theta: &'b [Differentiable<A>]|
-                 -> RankedDifferentiable<A, 1> {
-            relu(
-                t,
-                &(theta[0].clone().attach_rank().unwrap()),
-                &(theta[1].clone().attach_rank().unwrap()),
-            )
-            .attach_rank()
-            .unwrap()
-        },
+        f: Box::new(
+            for<'a, 'b> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
+                         theta: &'b [Differentiable<A>]|
+                         -> RankedDifferentiable<A, 1> {
+                relu(
+                    t,
+                    &(theta[0].clone().attach_rank().unwrap()),
+                    &(theta[1].clone().attach_rank().unwrap()),
+                )
+                .attach_rank()
+                .unwrap()
+            },
+        ),
         ranks: [input_len, neuron_count],
     }
 }
