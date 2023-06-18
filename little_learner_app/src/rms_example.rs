@@ -38,7 +38,8 @@ pub(crate) fn rms_example() {
         gradient_descent(
             hyper,
             &xs,
-            RankedDifferentiableTagged::of_slice_2::<_, 2>,
+            &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+            &mut RankedDifferentiableTagged::of_slice,
             &ys,
             zero_params,
             predictor::rms(predict_plane),

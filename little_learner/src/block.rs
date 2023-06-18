@@ -1,14 +1,20 @@
 use crate::auto_diff::{Differentiable, RankedDifferentiable, RankedDifferentiableTagged};
 use crate::ext::relu;
+use crate::scalar::Scalar;
 use crate::traits::NumLike;
+use num::Float;
+use ordered_float::NotNan;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
+use rand::Rng;
 
 pub struct Block<F, const N: usize> {
-    f: F,
+    pub f: F,
     ranks: [usize; N],
 }
 
 /// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
-pub fn compose<'a, 'c, 'd, A, T, B, C, F, G, const N: usize, const M: usize>(
+pub fn compose_once<'a, 'c, 'd, A, T, B, C, F, G, const N: usize, const M: usize>(
     b1: Block<F, N>,
     b2: Block<G, M>,
     j: usize,
@@ -31,8 +37,32 @@ where
     }
 }
 
+/// Does the second argument first, so compose(b1, b2) performs b2 on its input, and then b1.
+pub fn compose_mut<'a, 'c, 'd, A, T, B, C, F, G, const N: usize, const M: usize>(
+    mut b1: Block<F, N>,
+    mut b2: Block<G, M>,
+    j: usize,
+) -> Block<impl FnMut(&'a A, &'d [T]) -> C, { N + M }>
+where
+    F: FnMut(&'a A, &'d [T]) -> B,
+    G: for<'b> FnMut(&'b B, &'d [T]) -> C,
+    A: 'a,
+    T: 'd,
+{
+    let mut ranks = [0usize; N + M];
+    ranks[..N].copy_from_slice(&b1.ranks);
+    ranks[N..(M + N)].copy_from_slice(&b2.ranks);
+    Block {
+        f: move |t, theta| {
+            let intermediate = (b1.f)(t, theta);
+            (b2.f)(&intermediate, &theta[j..])
+        },
+        ranks,
+    }
+}
+
 #[must_use]
-pub fn dense<'b, A, Tag>(
+pub fn dense_once<'b, A, Tag>(
     input_len: usize,
     neuron_count: usize,
 ) -> Block<
@@ -60,4 +90,75 @@ where
         },
         ranks: [input_len, neuron_count],
     }
+}
+
+#[must_use]
+pub fn dense_mut<'b, A, Tag>(
+    input_len: usize,
+    neuron_count: usize,
+) -> Block<
+    impl for<'a> FnMut(
+        &'a RankedDifferentiableTagged<A, Tag, 1>,
+        &'b [Differentiable<A>],
+    ) -> RankedDifferentiable<A, 1>,
+    2,
+>
+where
+    Tag: Clone,
+    A: NumLike + PartialOrd + Default,
+{
+    Block {
+        f: for<'a> |t: &'a RankedDifferentiableTagged<A, Tag, 1>,
+                    theta: &'b [Differentiable<A>]|
+                 -> RankedDifferentiable<A, 1> {
+            relu(
+                t,
+                &(theta[0].clone().attach_rank().unwrap()),
+                &(theta[1].clone().attach_rank().unwrap()),
+            )
+            .attach_rank()
+            .unwrap()
+        },
+        ranks: [input_len, neuron_count],
+    }
+}
+
+pub fn dense_initial_weights<A, R>(
+    rng: &mut R,
+    input_len: usize,
+    neuron_count: usize,
+) -> Differentiable<NotNan<A>>
+where
+    R: Rng,
+    A: Float + num::One,
+    Standard: Distribution<A>,
+{
+    let mut rows = Vec::with_capacity(neuron_count);
+    // Variance of 2/n, mean of 0, suggests uniform distribution on [-sqrt(6/n), sqrt(6/n)].
+    // The Rust standard distribution on floats is uniform between 0 and 0.5.
+    let n = A::from(neuron_count).unwrap();
+    let four = A::from(4).unwrap();
+    let six = A::from(6).unwrap();
+    let dist = Standard.map(|x| ((four * x) - A::one()) * (six * n.recip()).sqrt());
+
+    for _ in 0..neuron_count {
+        let mut row = Vec::with_capacity(input_len);
+        for _ in 0..input_len {
+            row.push(Differentiable::of_scalar(Scalar::make(
+                NotNan::new(dist.sample(rng)).unwrap(),
+            )));
+        }
+        rows.push(Differentiable::of_vec(row));
+    }
+    Differentiable::of_vec(rows)
+}
+
+pub fn dense_initial_biases<A>(neuron_count: usize) -> Differentiable<A>
+where
+    A: crate::traits::Zero + Clone,
+{
+    Differentiable::of_vec(vec![
+        Differentiable::of_scalar(Scalar::make(A::zero()));
+        neuron_count
+    ])
 }

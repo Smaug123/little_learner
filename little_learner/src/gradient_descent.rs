@@ -58,9 +58,11 @@ pub fn gradient_descent<
     T,
     R,
     Point,
+    OutPoint,
     F,
     G,
     H,
+    I,
     Inflated,
     Hyper,
     ImmutableHyper,
@@ -69,8 +71,9 @@ pub fn gradient_descent<
 >(
     hyper: Hyper,
     xs: &'a [Point],
-    to_ranked_differentiable: G,
-    ys: &[T],
+    to_ranked_differentiable: &mut G,
+    to_ranked_differentiable_out: &mut I,
+    ys: &[OutPoint],
     zero_params: [Differentiable<T>; PARAM_NUM],
     mut predictor: Predictor<F, Inflated, Differentiable<T>, ImmutableHyper>,
     to_immutable: H,
@@ -78,11 +81,13 @@ pub fn gradient_descent<
 where
     T: NumLike + Hash + Copy + Default,
     Point: 'a + Copy,
-    F: Fn(
+    OutPoint: Copy,
+    F: FnMut(
         RankedDifferentiable<T, IN_SIZE>,
         &[Differentiable<T>; PARAM_NUM],
     ) -> RankedDifferentiable<T, 1>,
-    G: for<'b> Fn(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+    G: for<'b> FnMut(&'b [Point]) -> RankedDifferentiable<T, IN_SIZE>,
+    I: for<'b> FnMut(&'b [OutPoint]) -> RankedDifferentiable<T, 1>,
     Inflated: Clone,
     ImmutableHyper: Clone,
     Hyper: Into<hyper::BaseGradientDescent<R>>,
@@ -98,9 +103,9 @@ where
                 &mut |x| match gradient_hyper.sampling.as_mut() {
                     None => RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                         l2_loss_2(
-                            &predictor.predict,
+                            &mut predictor.predict,
                             to_ranked_differentiable(xs),
-                            RankedDifferentiable::of_slice(ys),
+                            to_ranked_differentiable_out(ys),
                             x,
                         ),
                     )]),
@@ -108,9 +113,9 @@ where
                         let (sampled_xs, sampled_ys) = sample::take_2(rng, *batch_size, xs, ys);
                         RankedDifferentiable::of_vector(vec![RankedDifferentiable::of_scalar(
                             l2_loss_2(
-                                &predictor.predict,
+                                &mut predictor.predict,
                                 to_ranked_differentiable(&sampled_xs),
-                                RankedDifferentiable::of_slice(&sampled_ys),
+                                to_ranked_differentiable_out(&sampled_ys),
                                 x,
                             ),
                         )])
@@ -166,7 +171,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::naked(predict_line_2_unranked),
@@ -201,7 +207,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b),
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::naked(predict_quadratic_unranked),
@@ -243,7 +250,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::naked(predict_plane),
@@ -279,7 +287,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut RankedDifferentiable::of_slice_2::<_, 2>,
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::naked(predict_plane),
@@ -345,7 +354,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::velocity(predict_plane),
@@ -385,7 +395,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::rms(predict_plane),
@@ -434,7 +445,8 @@ mod tests {
             gradient_descent(
                 hyper,
                 &xs,
-                RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut RankedDifferentiableTagged::of_slice_2::<_, 2>,
+                &mut |b| RankedDifferentiable::of_slice(b),
                 &ys,
                 zero_params,
                 predictor::adam(predict_plane),

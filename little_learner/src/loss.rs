@@ -89,13 +89,13 @@ where
 }
 
 pub fn l2_loss_2<A, F, Params, const N: usize>(
-    target: F,
+    target: &mut F,
     data_xs: RankedDifferentiable<A, N>,
     data_ys: RankedDifferentiable<A, 1>,
     params: Params,
 ) -> Scalar<A>
 where
-    F: Fn(RankedDifferentiable<A, N>, Params) -> RankedDifferentiable<A, 1>,
+    F: FnMut(RankedDifferentiable<A, N>, Params) -> RankedDifferentiable<A, 1>,
     A: Sum<A> + Mul<Output = A> + Copy + Default + Neg<Output = A> + Add<Output = A> + Zero,
 {
     let pred_ys = target(data_xs, params);
@@ -266,7 +266,7 @@ mod test_loss {
         let xs = [2.0, 1.0, 4.0, 3.0];
         let ys = [1.8, 1.2, 4.2, 3.3];
         let loss = l2_loss_2(
-            predict_line_2,
+            &mut predict_line_2,
             RankedDifferentiable::of_slice(&xs),
             RankedDifferentiable::of_slice(&ys),
             &[
