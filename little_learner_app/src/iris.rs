@@ -105,7 +105,7 @@ impl<A> Iris<A> {
         (vec, one_hot)
     }
 
-    pub fn map<B, F>(&self, f: F) -> Iris<B>
+    pub fn map<B, F>(&self, mut f: F) -> Iris<B>
     where
         F: FnMut(A) -> B,
         A: Copy,
