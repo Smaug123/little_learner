@@ -3,16 +3,16 @@ pipeline:
     image: nixos/nix
     commands:
       # Lint
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
+      - nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
+      - nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
+      - nix --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
+      - nix --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
       # Test
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose
+      - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
+      - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose
       # Run through Nix
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' build
-      - nix --store /mnt/nix --experimental-features 'nix-command flakes' run
+      - nix --experimental-features 'nix-command flakes' build
+      - nix --experimental-features 'nix-command flakes' run
 
 when:
   evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request")'
