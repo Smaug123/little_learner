@@ -2,20 +2,18 @@ pipeline:
   build:
     image: nixos/nix
     commands:
-      - echo ${CI_BUILD_EVENT}
-      - echo ${CI_COMMIT_BRANCH}
-      - echo ${CI_REPO_DEFAULT_BRANCH}
+      - echo 'experimental-features = flakes nix-command' >> /etc/nix/nix.conf
       # Lint
-      - nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
-      - nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
-      - nix --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
-      - nix --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
+      - nix develop --command cargo -- fmt --all -- --check
+      - nix develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
+      - nix develop .#ci --command alejandra -- --check .
+      - nix develop .#ci --command markdown-link-check README.md
       # Test
-      - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
-      - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose
+      - nix develop --command cargo test --verbose --release
+      - nix develop --command cargo test --verbose
       # Run through Nix
-      - nix --experimental-features 'nix-command flakes' build
-      - nix --experimental-features 'nix-command flakes' run
+      - nix build
+      - nix run
 
 when:
-  evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request" && CI_COMMIT_BRANCH != CI_REPO_DEFAULT_BRANCH)'
+  evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request")'
