@@ -3,7 +3,7 @@ pipeline:
     image: nixos/nix
     commands:
       - echo 'experimental-features = flakes nix-command' >> /etc/nix/nix.conf
-      - nix run --store 'unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt' --eval-store local nixpkgs#bashInteractive
+      - nix run --store 'unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt' --eval-store local nixpkgs#bashInteractive -- -c 'echo Installed'
       # Lint
       - nix develop --store 'unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt' --eval-store local --command cargo -- fmt --all -- --check
       - nix develop --store 'unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt' --eval-store local --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
