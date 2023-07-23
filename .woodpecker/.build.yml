@@ -13,6 +13,8 @@ pipeline:
       # Run through Nix
       - nix --experimental-features 'nix-command flakes' build
       - nix --experimental-features 'nix-command flakes' run
+    volumes:
+      - /nix:/mnt/nix:ro
 
 when:
   evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request")'
