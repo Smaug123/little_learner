@@ -17,8 +17,8 @@ pipeline:
       - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' build
       - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' run
 
-volumes:
-  - /nix:/mnt/nix:ro
+    volumes:
+      - /nix:/mnt/nix:ro
 
 when:
   evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request" && CI_COMMIT_BRANCH != CI_REPO_DEFAULT_BRANCH)'
