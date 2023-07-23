@@ -2,9 +2,6 @@ pipeline:
   build:
     image: nixos/nix
     commands:
-      - echo ${CI_BUILD_EVENT}
-      - echo ${CI_COMMIT_BRANCH}
-      - echo ${CI_REPO_DEFAULT_BRANCH}
       # Lint
       - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
       - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
