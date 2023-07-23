@@ -3,10 +3,10 @@ pipeline:
     image: nixos/nix
     commands:
       # Lint
-      - nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
-      - nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
-      - nix --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
-      - nix --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
+      - nix --store /mnt/nix --eval-store local --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
+      - nix --store /mnt/nix --eval-store local --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
+      - nix --store /mnt/nix --eval-store local --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
+      - nix --store /mnt/nix --eval-store local --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
       # Test
       - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
       - nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose
