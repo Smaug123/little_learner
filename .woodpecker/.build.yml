@@ -6,19 +6,16 @@ pipeline:
       - echo ${CI_COMMIT_BRANCH}
       - echo ${CI_REPO_DEFAULT_BRANCH}
       # Lint
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- fmt --all -- --check
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo -- clippy -- -D warnings -W clippy::must_use_candidate
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop .#ci --command alejandra -- --check .
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop .#ci --command markdown-link-check README.md
       # Test
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' develop --command cargo test --verbose
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose --release
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' develop --command cargo test --verbose
       # Run through Nix
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' build
-      - nix --store unix:///mnt/nix/var/nix/daemon-socket/socket?root=/mnt --experimental-features 'nix-command flakes' run
-
-    volumes:
-      - /nix:/mnt/nix:ro
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' build
+      - nix --store /mnt/nix --experimental-features 'nix-command flakes' run
 
 when:
   evaluate: '(CI_BUILD_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_BUILD_EVENT == "pull_request" && CI_COMMIT_BRANCH != CI_REPO_DEFAULT_BRANCH)'
