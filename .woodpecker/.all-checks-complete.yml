@@ -1,4 +1,4 @@
-pipeline:
+steps:
   echo:
     image: alpine
     commands:
