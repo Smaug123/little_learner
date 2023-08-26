@@ -15,5 +15,7 @@ steps:
       - nix build
       - nix run
 
-when:
-  evaluate: '(CI_PIPELINE_EVENT == "push" && CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH) || (CI_PIPELINE_EVENT == "pull_request")'
+    when:
+      - event: "push"
+        evaluate: 'CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH'
+      - event: "pull_request"
