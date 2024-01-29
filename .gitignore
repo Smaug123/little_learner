@@ -4,3 +4,4 @@ target/
 .vscode/
 .profile*
 .DS_Store
+.direnv/
